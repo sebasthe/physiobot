@@ -64,8 +64,7 @@ export async function POST() {
 
     return NextResponse.json(plan)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error('Plan generation failed:', message)
-    return NextResponse.json({ error: 'Plan generation failed', detail: message }, { status: 500 })
+    console.error('Plan generation failed:', err)
+    return NextResponse.json({ error: 'Plan generation failed' }, { status: 500 })
   }
 }
