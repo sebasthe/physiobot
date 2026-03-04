@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { anthropic } from '@/lib/claude/client'
 import { buildSystemPrompt, buildFeedbackPrompt } from '@/lib/claude/prompts'
-import { extractAndStoreMemories } from '@/lib/mem0'
+import { extractAndStoreMemories, getRelevantMemories } from '@/lib/mem0'
 import type { SessionFeedback, UserPersonality, Exercise } from '@/lib/types'
 
 export async function POST(request: Request) {
@@ -46,9 +46,14 @@ export async function POST(request: Request) {
 
   if (!plan) return NextResponse.json({ ok: true })
 
+  const memoryTexts = await getRelevantMemories(
+    user.id,
+    `Physiotherapie Feedback ${feedback.map(f => f.exercise_id).join(' ')}`
+  ).catch(() => [])
+
   const systemPrompt = buildSystemPrompt({
     personality: personality as UserPersonality,
-    memories: [],
+    memories: memoryTexts,
   })
 
   const currentExercisesJson = JSON.stringify({ exercises: plan.exercises })
