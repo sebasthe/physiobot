@@ -72,7 +72,8 @@ export async function POST(request: Request) {
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response')
 
-    const updatedPlan = JSON.parse(content.text) as { exercises: Exercise[] }
+    const rawText = content.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+    const updatedPlan = JSON.parse(rawText) as { exercises: Exercise[] }
 
     const { data: newPlan } = await supabase
       .from('training_plans')
