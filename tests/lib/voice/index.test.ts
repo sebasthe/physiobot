@@ -21,7 +21,7 @@ describe('createVoiceProvider', () => {
   })
 
   it('defaults to BrowserTTSProvider when env var not set', async () => {
-    vi.stubEnv('NEXT_PUBLIC_VOICE_PROVIDER', '')
+    vi.unstubAllEnvs()
     const { createVoiceProvider } = await import('@/lib/voice/index')
     const { BrowserTTSProvider } = await import('@/lib/voice/browser-tts')
     expect(createVoiceProvider()).toBeInstanceOf(BrowserTTSProvider)

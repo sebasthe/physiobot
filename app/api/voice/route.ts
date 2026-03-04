@@ -1,12 +1,34 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const MAX_TEXT_LENGTH = 2000
+
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  let user
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    return NextResponse.json({ error: 'Auth error' }, { status: 500 })
+  }
+
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { text } = await request.json()
+  let text: unknown
+  try {
+    const body = await request.json()
+    text = body?.text
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  if (typeof text !== 'string' || text.trim() === '') {
+    return NextResponse.json({ error: 'text must be a non-empty string' }, { status: 400 })
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return NextResponse.json({ error: `text must be at most ${MAX_TEXT_LENGTH} characters` }, { status: 400 })
+  }
 
   const apiKey = process.env.ELEVENLABS_API_KEY
   const voiceId = process.env.ELEVENLABS_VOICE_ID ?? 'pNInz6obpgDQGcFmaJgB'

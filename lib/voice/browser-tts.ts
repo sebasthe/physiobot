@@ -9,7 +9,7 @@ export class BrowserTTSProvider implements VoiceProvider {
       utterance.lang = 'de-DE'
       utterance.rate = 1.0
       utterance.onend = () => resolve()
-      utterance.onerror = () => resolve()
+      utterance.onerror = (e) => { console.warn('BrowserTTS error:', e.error); resolve() }
       window.speechSynthesis.speak(utterance)
     })
   }
