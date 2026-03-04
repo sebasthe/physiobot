@@ -86,7 +86,7 @@ export default function PersonalityOnboardingPage() {
       feedback_style: selections.feedback_style as FeedbackStyle,
       language: selections.language as Language,
       coach_persona: selections.coach_persona,
-    })
+    }, { onConflict: 'user_id' })
 
     if (error) {
       console.error('Failed to save personality:', error)

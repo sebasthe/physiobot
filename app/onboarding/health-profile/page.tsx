@@ -50,7 +50,7 @@ export default function HealthProfilePage() {
       fitness_level: fitnessLevel,
       session_duration_minutes: sessionDuration,
       sessions_per_week: sessionsPerWeek,
-    })
+    }, { onConflict: 'user_id' })
 
     if (error) {
       console.error('Failed to save health profile:', error)
