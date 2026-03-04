@@ -77,12 +77,17 @@ function FeedbackForm() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
-    await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, feedback: feedbacks }),
-    })
-    router.push('/dashboard')
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, feedback: feedbacks }),
+      })
+      router.push('/dashboard')
+    } catch (err) {
+      console.error('Feedback submission failed:', err)
+      setIsSubmitting(false)
+    }
   }
 
   return (
