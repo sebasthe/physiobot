@@ -28,6 +28,16 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [animKey, setAnimKey] = useState(0)
 
+  if (exercises.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--background)' }}>
+        <span className="text-phase" style={{ color: 'var(--text-muted)', letterSpacing: '0.2em' }}>
+          KEINE ÜBUNGEN
+        </span>
+      </div>
+    )
+  }
+
   const isLast = currentIndex === exercises.length - 1
   const current = exercises[currentIndex]
   const totalDuration = current.duration_seconds ?? null
@@ -44,6 +54,7 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     } else {
       setTimeLeft(null)
     }
+  // speak is intentionally omitted: we only re-run on index change, not when speak prop ref changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex])
 

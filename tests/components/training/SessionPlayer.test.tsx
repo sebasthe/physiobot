@@ -32,4 +32,15 @@ describe('SessionPlayer', () => {
     await user.click(screen.getByRole('button', { name: /abschließen/i }))
     expect(onComplete).toHaveBeenCalled()
   })
+
+  it('renders empty state when exercises array is empty', () => {
+    render(<SessionPlayer exercises={[]} onComplete={vi.fn()} speak={vi.fn().mockResolvedValue(undefined)} />)
+    expect(screen.getByText(/keine übungen/i)).toBeInTheDocument()
+  })
+
+  it('calls speak with the voice_script of the first exercise on mount', () => {
+    const speak = vi.fn().mockResolvedValue(undefined)
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} speak={speak} />)
+    expect(speak).toHaveBeenCalledWith('Mobilisiere jetzt deinen Rücken!')
+  })
 })

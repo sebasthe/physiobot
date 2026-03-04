@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { createVoiceProvider } from '@/lib/voice'
@@ -11,10 +11,17 @@ export default function TrainingSessionPage() {
   const [sessionId, setSessionId] = useState<string>()
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-  const voice = createVoiceProvider()
+  const voiceRef = useRef<ReturnType<typeof createVoiceProvider> | null>(null)
+  if (!voiceRef.current) {
+    voiceRef.current = createVoiceProvider()
+  }
+  const voice = voiceRef.current
 
   useEffect(() => {
-    loadPlan()
+    loadPlan().catch(err => {
+      console.error('Failed to load training plan:', err)
+      router.push('/dashboard')
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -39,20 +46,28 @@ export default function TrainingSessionPage() {
 
     if (!plan) { router.push('/dashboard'); return }
 
-    const { data: session } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from('sessions')
       .insert({ plan_id: profile.active_plan_id, user_id: user.id })
       .select()
       .single()
 
-    setSessionId(session?.id)
+    if (sessionError || !session) {
+      console.error('Failed to create session record:', sessionError)
+      // Continue anyway — session tracking failed but training can still proceed
+      // Use a placeholder so the URL isn't "?session=undefined"
+      setSessionId(undefined)
+    } else {
+      setSessionId(session.id)
+    }
     setExercises(plan.exercises as Exercise[])
     setIsLoading(false)
   }
 
   const handleComplete = async () => {
     voice.stop()
-    router.push(`/training/feedback?session=${sessionId}`)
+    const query = sessionId ? `?session=${sessionId}` : ''
+    router.push(`/training/feedback${query}`)
   }
 
   if (isLoading) {
