@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { anthropic } from '@/lib/claude/client'
 import { buildSystemPrompt, buildFeedbackPrompt } from '@/lib/claude/prompts'
+import { extractAndStoreMemories } from '@/lib/mem0'
 import type { SessionFeedback, UserPersonality, Exercise } from '@/lib/types'
 
 export async function POST(request: Request) {
@@ -20,6 +21,13 @@ export async function POST(request: Request) {
       .from('sessions')
       .update({ feedback, completed_at: new Date().toISOString() })
       .eq('id', sessionId)
+  }
+
+  // Store painful exercises in user memory for future plan personalization
+  const painfulExercises = feedback.filter((f: SessionFeedback) => f.difficulty === 'painful')
+  if (painfulExercises.length > 0) {
+    const summary = `Session-Feedback: Schmerzhafte Übungen: ${painfulExercises.map((f: SessionFeedback) => f.notes ?? f.exercise_id).join(', ')}`
+    await extractAndStoreMemories(user.id, summary).catch(console.error)
   }
 
   // Get current plan + user context

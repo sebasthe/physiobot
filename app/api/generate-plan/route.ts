@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { anthropic } from '@/lib/claude/client'
 import { buildSystemPrompt, buildPlanRequestMessage } from '@/lib/claude/prompts'
+import { getRelevantMemories } from '@/lib/mem0'
 import type { HealthProfile, UserPersonality, TrainingPlan } from '@/lib/types'
 
 export async function POST() {
@@ -18,14 +19,10 @@ export async function POST() {
     return NextResponse.json({ error: 'Profile incomplete' }, { status: 400 })
   }
 
-  const { data: memories } = await supabase
-    .from('user_memories')
-    .select('memory')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(10)
-
-  const memoryTexts = (memories ?? []).map((m: { memory: string }) => m.memory)
+  const memoryTexts = await getRelevantMemories(
+    user.id,
+    `Physiotherapie Training ${healthProfile.complaints.join(' ')}`
+  ).catch(() => []) // graceful fallback if Mem0 unavailable
 
   const systemPrompt = buildSystemPrompt({
     personality: personality as UserPersonality,
