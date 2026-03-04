@@ -25,7 +25,7 @@ describe('buildSystemPrompt', () => {
 
   it('includes language instruction', () => {
     const prompt = buildSystemPrompt({ personality, memories: [] })
-    expect(prompt).toContain('Deutsch')
+    expect(prompt).toContain('German')
   })
 
   it('includes memories when provided', () => {
