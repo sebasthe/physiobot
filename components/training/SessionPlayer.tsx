@@ -62,6 +62,7 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([])
   const [isMicAvailable, setIsMicAvailable] = useState(false)
   const [isResponding, setIsResponding] = useState(false)
+  const [typedMessage, setTypedMessage] = useState('')
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const userTranscriptRef = useRef('')
 
@@ -167,14 +168,19 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   }
 
   const sendUserMessage = async (message: string) => {
+    const trimmedMessage = message.trim()
+    if (!trimmedMessage) return
+
     setIsResponding(true)
-    setTranscript(prev => [...prev, { role: 'user', content: message }])
+    setUserTranscript(trimmedMessage)
+    setTypedMessage('')
+    setTranscript(prev => [...prev, { role: 'user', content: trimmedMessage }])
     try {
       const response = await fetch('/api/voice/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...transcript, { role: 'user', content: message }],
+          messages: [...transcript, { role: 'user', content: trimmedMessage }],
           currentExercise: current,
         }),
       })
@@ -242,7 +248,7 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
           </div>
         ) : (
           <>
-        <div className="px-6 pb-8 pt-[max(1.5rem,var(--safe-top))] text-white">
+        <div className="px-6 pb-12 pt-[max(1.5rem,var(--safe-top))] text-white">
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
@@ -264,7 +270,7 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
             </div>
           </div>
 
-          <div className="relative mb-6 flex justify-center">
+          <div className="relative mb-8 flex justify-center">
             <div className="absolute left-1/2 top-1/2 h-[6.5rem] w-[6.5rem] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-60" style={{ borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)', animation: 'waveOut 1.8s ease-out infinite' }} />
             <div className="absolute left-1/2 top-1/2 h-[6.5rem] w-[6.5rem] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-60" style={{ borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)', animation: 'waveOut 1.8s ease-out infinite', animationDelay: '0.6s' }} />
             <div className="absolute left-1/2 top-1/2 h-[6.5rem] w-[6.5rem] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-60" style={{ borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)', animation: 'waveOut 1.8s ease-out infinite', animationDelay: '1.2s' }} />
@@ -290,16 +296,26 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
 
           <div className="mt-4 flex items-center gap-3">
             <div
-              className="flex h-10 flex-1 items-center gap-2 rounded-full border px-4"
+              className="flex min-h-11 flex-1 items-center gap-2 rounded-full border px-4"
               style={{
                 background: mode === 'listening' ? 'rgba(240,114,74,0.05)' : 'rgba(255,255,255,0.04)',
                 borderColor: mode === 'listening' ? 'rgba(240,114,74,0.35)' : 'rgba(255,255,255,0.08)',
               }}
             >
-              <span className="text-xs" style={{ color: mode === 'listening' ? 'rgba(240,114,74,0.75)' : 'rgba(255,255,255,0.4)' }}>
-                {isMicAvailable ? (mode === 'listening' ? 'Ich höre zu…' : 'Sag etwas oder tippe auf das Mikro') : 'Mikrofon im Browser nicht verfügbar'}
-              </span>
-              <div className="ml-auto flex items-center gap-[3px]">
+              <input
+                value={typedMessage}
+                onChange={event => setTypedMessage(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void sendUserMessage(typedMessage)
+                  }
+                }}
+                placeholder={isMicAvailable ? 'Schreib Dr. Mia eine Frage…' : 'Mikrofon nicht verfügbar, tippe hier…'}
+                className="h-11 flex-1 bg-transparent text-sm text-white placeholder:text-white/35 focus:outline-none"
+                aria-label="Nachricht an Dr. Mia"
+              />
+              <div className="flex items-center gap-[3px]">
                 {Array.from({ length: 5 }).map((_, index) => (
                   <div
                     key={index}
@@ -322,12 +338,20 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
             >
               🎙
             </button>
+            <button
+              onClick={() => void sendUserMessage(typedMessage)}
+              disabled={isResponding || !typedMessage.trim()}
+              className="flex h-10 min-w-14 items-center justify-center rounded-full px-3 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: 'var(--teal)', boxShadow: '0 4px 12px rgba(29,122,106,0.35)' }}
+            >
+              Senden
+            </button>
           </div>
         </div>
 
         <div className="mt-auto rounded-t-[34px] bg-[var(--background)] px-6 pb-[calc(1.5rem+var(--safe-bottom))] pt-6">
           {timeLeft !== null && (
-            <div className="mb-6 flex items-center justify-center">
+            <div className="mb-8 flex items-center justify-center">
               <div className="relative flex items-center justify-center">
                 <svg width="220" height="220" style={{ transform: 'rotate(-90deg)' }}>
                   <circle cx="110" cy="110" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
@@ -344,9 +368,9 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
                     style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.6s ease' }}
                   />
                 </svg>
-                <div key={`timer-${timeLeft}`} className="absolute text-center animate-count-tick">
-                  <div className="text-phase mb-1 text-[var(--text-muted)]">Sekunden</div>
-                  <div className="text-timer" style={{ color: timeLeft <= 5 ? 'var(--peach)' : 'var(--text-primary)' }}>{timeLeft}</div>
+                <div key={`timer-${timeLeft}`} className="absolute flex flex-col items-center justify-center gap-2 text-center animate-count-tick">
+                  <div className="text-phase text-[var(--text-muted)]">Sekunden</div>
+                  <div className="text-timer leading-none" style={{ color: timeLeft <= 5 ? 'var(--peach)' : 'var(--text-primary)' }}>{timeLeft}</div>
                 </div>
               </div>
             </div>
