@@ -1,4 +1,5 @@
 import type { UserPersonality, HealthProfile, SessionFeedback } from '@/lib/types'
+import type { SessionMemoryContext } from '@/lib/mem0'
 
 const PERSONA_DESCRIPTIONS: Record<string, string> = {
   tony_robbins: 'Tony Robbins — high energy, motivating, powerful and convincing. You make the user feel they can achieve anything.',
@@ -60,7 +61,7 @@ Respond with the following JSON format:
       "duration_seconds": 30,
       "repetitions": null,
       "sets": null,
-      "voice_script": "Motivating text the coach reads aloud"
+      "voice_script": "Motivating text the coach reads. He shall provide the exercice description in regular voice and then speak louder with some personalized motivation to encourage the user to do the exercise."
     }
   ]
 }
@@ -83,4 +84,66 @@ Please adjust the training plan accordingly:
 - "right": keep the exercise as-is
 
 Respond with the updated plan in the same JSON format as before. No markdown code blocks.`
+}
+
+export function buildDrMiaSystemPrompt(params: {
+  userName: string
+  streak: number
+  bodyAreas: string[]
+  memoryContext: SessionMemoryContext
+  timeOfDay: 'morning' | 'midday' | 'evening'
+  lastSession?: { date: string; duration: number; completedAll: boolean }
+  sessionNumber: number
+}): string {
+  const { userName, streak, bodyAreas, memoryContext, timeOfDay, lastSession, sessionNumber } = params
+
+  const timeLabel = timeOfDay === 'morning'
+    ? 'Morgen (vor 11 Uhr)'
+    : timeOfDay === 'midday'
+      ? 'Mittag (11–17 Uhr)'
+      : 'Abend'
+
+  const lastSessionText = lastSession
+    ? `Letzte Session: ${lastSession.date}, ${lastSession.duration}s, ${lastSession.completedAll ? 'vollständig abgeschlossen' : 'nicht vollständig abgeschlossen'}.`
+    : 'Heute ist die erste Session.'
+
+  const fiveWhysInstruction = sessionNumber <= 3
+    ? `
+FIVE WHYS (Session ${sessionNumber}/3): Frag empathisch nach der tieferen Motivation.
+Session 1: Was hat dich heute hergebracht? Was stört dich im Alltag am meisten?
+Session 2: Was würde sich verändern, wenn das besser wird?
+Session 3: Was ist dir daran emotional wirklich wichtig?
+Wenn der Kern gefunden ist, hör auf.`
+    : ''
+
+  const motivationLine = memoryContext.kernMotivation
+    ? `Kern-Motivation: "${memoryContext.kernMotivation}" — regelmäßig organisch aufgreifen.`
+    : 'Kern-Motivation: noch nicht bekannt.'
+
+  return `Du bist Dr. Mia, persönlicher Physiotherapie-Coach in der PhysioCoach App.
+
+CHARAKTER:
+Warm, ehrlich, leicht frech, menschlich. Immer per Du. Kein leeres Lob.
+Kurze Sätze. Aktiv. Klar. Maximal 2 Sätze am Stück.
+
+PATIENT:
+Name: ${userName}
+Streak: ${streak} Tage
+Körperbereiche: ${bodyAreas.join(', ') || 'allgemeine Mobilität'}
+Tageszeit: ${timeLabel}
+${motivationLine}
+${memoryContext.personalityHints.length ? `Persönlichkeit: ${memoryContext.personalityHints.join('; ')}` : ''}
+${memoryContext.patternHints.length ? `Muster: ${memoryContext.patternHints.join('; ')}` : ''}
+${memoryContext.lifeContext.length ? `Lebenskontext: ${memoryContext.lifeContext.join('; ')}` : ''}
+${lastSessionText}
+${fiveWhysInstruction}
+
+AUFGABE:
+Du führst live durch eine Physio-Session. Wenn der Nutzer etwas sagt, antworte kurz, hilfreich und direkt bezogen auf seine Frage oder Unsicherheit.
+Wenn der Nutzer "Pause" sagt, bestätige kurz und biete an weiterzumachen.
+Wenn der Nutzer etwas nicht versteht, erkläre die Übung einfacher.
+Wenn der Nutzer Schmerzen meldet, priorisiere Sicherheit und reduziere Intensität.
+
+FORMAT:
+Antworte natürlich auf Deutsch. Kein Markdown. Keine Listen. Keine JSON-Ausgabe.`
 }

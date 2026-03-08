@@ -21,33 +21,28 @@ export default function PlanOverview({ exercises, onStartTraining }: Props) {
         if (phaseExercises.length === 0) return null
         const config = PHASE_CONFIG[phase]
         return (
-          <div key={phase}>
-            <div className="flex items-center gap-2 mb-3">
-              <span>{config.emoji}</span>
-              <span className="text-phase font-display" style={{ color: config.color, letterSpacing: '0.15em', fontSize: '0.65rem' }}>
+          <div key={phase} className="rounded-[24px] border border-[var(--border)] bg-white p-4 shadow-[var(--shadow-sm)]">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-xl">{config.emoji}</span>
+              <span className="text-phase" style={{ color: config.color, letterSpacing: '0.15em', fontSize: '0.65rem' }}>
                 {config.label}
               </span>
-              <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
+              <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>
                 {phaseExercises.length} Übung{phaseExercises.length !== 1 ? 'en' : ''}
               </span>
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {phaseExercises.map((ex, i) => (
-                <li key={i} className="exercise-card px-4 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>{ex.name}</div>
-                    {ex.duration_seconds && (
-                      <span className="font-display text-xs flex-shrink-0" style={{ color: 'var(--primary)' }}>
-                        {ex.duration_seconds}s
-                      </span>
-                    )}
-                    {ex.repetitions && ex.sets && (
-                      <span className="font-display text-xs flex-shrink-0" style={{ color: 'var(--primary)' }}>
-                        {ex.sets}×{ex.repetitions}
-                      </span>
-                    )}
+                <li key={i} className="exercise-card px-4 py-4">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-[15px]" style={{ color: 'var(--foreground)' }}>{ex.name}</div>
+                      <div className="mt-1 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>{ex.description}</div>
+                    </div>
+                    <div className="rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap" style={{ background: 'var(--teal-light)', color: 'var(--teal)' }}>
+                      {ex.duration_seconds ? `${ex.duration_seconds}s` : `${ex.sets}×${ex.repetitions}`}
+                    </div>
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{ex.description}</div>
                 </li>
               ))}
             </ul>
@@ -57,7 +52,7 @@ export default function PlanOverview({ exercises, onStartTraining }: Props) {
 
       <button
         onClick={onStartTraining}
-        className="btn-primary w-full rounded-xl py-4 text-xl animate-pulse-glow"
+        className="btn-primary w-full rounded-[18px] py-4 text-lg animate-pulse-glow"
       >
         Training starten
       </button>

@@ -2,7 +2,8 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { SessionFeedback } from '@/lib/types'
+import type { Exercise, SessionFeedback } from '@/lib/types'
+import type { TranscriptMessage } from '@/lib/mem0'
 
 const DIFFICULTY_OPTIONS = [
   { value: 'too_easy',  emoji: '🌟', label: 'Zu leicht', color: '#63B2FF', bg: 'rgba(99,178,255,0.12)' },
@@ -14,6 +15,8 @@ const DIFFICULTY_OPTIONS = [
 function FeedbackForm() {
   const [feedbacks, setFeedbacks] = useState<SessionFeedback[]>([])
   const [exercises, setExercises] = useState<{ name: string; index: number }[]>([])
+  const [completedExercises, setCompletedExercises] = useState<Exercise[]>([])
+  const [transcript, setTranscript] = useState<TranscriptMessage[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const router = useRouter()
@@ -22,8 +25,24 @@ function FeedbackForm() {
 
   useEffect(() => {
     loadExercises()
+    loadStoredSessionData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const loadStoredSessionData = () => {
+    if (typeof window === 'undefined') return
+    const key = sessionId ? `session-transcript:${sessionId}` : 'session-transcript:pending'
+    const raw = window.sessionStorage.getItem(key)
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw) as { transcript?: TranscriptMessage[]; completedExercises?: Exercise[] }
+      setTranscript(parsed.transcript ?? [])
+      setCompletedExercises(parsed.completedExercises ?? [])
+      window.sessionStorage.removeItem(key)
+    } catch {
+      window.sessionStorage.removeItem(key)
+    }
+  }
 
   const loadExercises = async () => {
     const supabase = createClient()
@@ -81,7 +100,7 @@ function FeedbackForm() {
       await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, feedback: feedbacks }),
+        body: JSON.stringify({ sessionId, feedback: feedbacks, transcript, exercises: completedExercises }),
       })
       router.push('/dashboard')
     } catch (err) {
@@ -95,43 +114,40 @@ function FeedbackForm() {
       className="min-h-screen flex flex-col"
       style={{ background: 'var(--background)', maxWidth: 430, margin: '0 auto' }}
     >
-      {/* Ambient victory glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 70% 40% at 50% 0%, rgba(240,160,75,0.07) 0%, transparent 70%)',
-        }}
-      />
+      <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 70% 40% at 50% 0%, rgba(29,122,106,0.09) 0%, transparent 70%)' }} />
 
-      {/* Hero header */}
-      <div className="relative z-10 px-6 pt-12 pb-8 text-center animate-slide-up">
-        <div
-          className="text-phase mb-3"
-          style={{ color: 'var(--primary)', letterSpacing: '0.2em' }}
-        >
-          TRAINING ABGESCHLOSSEN
+      <div className="relative z-10 px-6 pb-8 pt-12 text-center animate-slide-up">
+        <div className="mx-auto mb-4 flex h-20 w-20 animate-pulse-glow items-center justify-center rounded-full bg-[var(--gold-light)] text-4xl">
+          🏆
         </div>
-        <h1
-          className="font-display uppercase"
-          style={{ fontSize: 'clamp(3rem, 16vw, 5rem)', lineHeight: 0.95, color: 'var(--foreground)' }}
-        >
-          Gut<span style={{ color: 'var(--primary)' }}>gemacht</span>
+        <div className="text-phase mb-3" style={{ color: 'var(--teal)' }}>
+          Session geschafft
+        </div>
+        <h1 className="font-display text-5xl leading-none text-[var(--foreground)]">
+          Stark <span style={{ color: 'var(--teal)' }}>gemacht</span>
         </h1>
-        <p
-          className="text-sm mt-3"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          Wie war jede Übung? Dein Plan wird angepasst.
+        <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Dr. Mia passt deinen Plan anhand deines Feedbacks an.
         </p>
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="rounded-2xl bg-white px-3 py-4 shadow-[var(--shadow-sm)]">
+            <div className="text-xl">⚡</div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">+40</div>
+            <div className="text-[11px] text-[var(--text-muted)]">XP</div>
+          </div>
+          <div className="rounded-2xl bg-white px-3 py-4 shadow-[var(--shadow-sm)]">
+            <div className="text-xl">🔥</div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">+1</div>
+            <div className="text-[11px] text-[var(--text-muted)]">Streak</div>
+          </div>
+          <div className="rounded-2xl bg-white px-3 py-4 shadow-[var(--shadow-sm)]">
+            <div className="text-xl">🌿</div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">{exercises.length}</div>
+            <div className="text-[11px] text-[var(--text-muted)]">Übungen</div>
+          </div>
+        </div>
       </div>
 
-      {/* Divider */}
-      <div
-        className="mx-6 mb-6"
-        style={{ height: 1, background: 'var(--border)' }}
-      />
-
-      {/* Exercise scorecard */}
       <div className="relative z-10 flex-1 px-4 space-y-3 pb-4">
         {!loaded && (
           <div className="flex items-center justify-center py-12">
@@ -162,12 +178,11 @@ function FeedbackForm() {
               >
                 {/* Exercise name */}
                 <div
-                  className="font-display uppercase text-sm mb-2"
-                  style={{ color: 'var(--foreground)', letterSpacing: '0.08em' }}
+                  className="font-display text-xl mb-3"
+                  style={{ color: 'var(--foreground)' }}
                 >
                   {ex.name}
                 </div>
-                {/* Rating buttons */}
                 <div className="grid grid-cols-4 gap-1.5">
                   {DIFFICULTY_OPTIONS.map(opt => {
                     const isSelected = selected === opt.value
@@ -186,7 +201,7 @@ function FeedbackForm() {
                         <span
                           style={{
                             fontSize: '0.55rem',
-                            fontFamily: 'var(--font-display)',
+                            fontFamily: 'var(--font-body)',
                             letterSpacing: '0.06em',
                             color: isSelected ? opt.color : 'var(--text-muted)',
                             textTransform: 'uppercase',
@@ -204,7 +219,6 @@ function FeedbackForm() {
         })}
       </div>
 
-      {/* Submit */}
       <div
         className="relative z-10 px-6 py-6"
         style={{ paddingBottom: 'calc(1.5rem + var(--safe-bottom, 0px))' }}
@@ -212,9 +226,9 @@ function FeedbackForm() {
         <button
           onClick={handleSubmit}
           disabled={isSubmitting || !loaded}
-          className="btn-primary w-full rounded-2xl py-4 font-display text-lg tracking-widest uppercase disabled:opacity-50"
+          className="btn-primary w-full rounded-2xl py-4 text-lg disabled:opacity-50"
         >
-          {isSubmitting ? 'PLAN WIRD ANGEPASST...' : 'PLAN ANPASSEN →'}
+          {isSubmitting ? 'Plan wird angepasst...' : 'Feedback senden'}
         </button>
       </div>
     </main>

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from './DashboardClient'
-import type { Exercise } from '@/lib/types'
+import type { Exercise, Schedule, Streak } from '@/lib/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -20,9 +20,15 @@ export default async function DashboardPage() {
   // Get profile with active plan
   const { data: profile } = await supabase
     .from('profiles')
-    .select('active_plan_id')
+    .select('active_plan_id, xp, level, name')
     .eq('id', user.id)
     .single()
+
+  const [{ data: streak }, { data: badges }, { data: schedule }] = await Promise.all([
+    supabase.from('streaks').select('current, longest, last_session, freeze_days').eq('user_id', user.id).maybeSingle(),
+    supabase.from('badges_earned').select('badge_key').eq('user_id', user.id),
+    supabase.from('schedules').select('days, notify_time, timezone').eq('user_id', user.id).maybeSingle(),
+  ])
 
   let exercises: Exercise[] = []
   if (profile?.active_plan_id) {
@@ -38,6 +44,14 @@ export default async function DashboardPage() {
     <DashboardClient
       hasActivePlan={!!profile?.active_plan_id}
       initialExercises={exercises}
+      profile={{
+        name: profile?.name ?? null,
+        xp: profile?.xp ?? 0,
+        level: profile?.level ?? 1,
+      }}
+      streak={(streak as Streak | null) ?? null}
+      earnedBadgeKeys={(badges ?? []).map(badge => badge.badge_key)}
+      schedule={(schedule as Schedule | null) ?? null}
     />
   )
 }

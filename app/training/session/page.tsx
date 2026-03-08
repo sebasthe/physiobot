@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { createVoiceProvider } from '@/lib/voice'
 import SessionPlayer from '@/components/training/SessionPlayer'
 import type { Exercise } from '@/lib/types'
+import type { TranscriptMessage } from '@/lib/mem0'
 
 export default function TrainingSessionPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
@@ -70,6 +71,16 @@ export default function TrainingSessionPage() {
     router.push(`/training/feedback${query}`)
   }
 
+  const handleSessionComplete = async (payload: { transcript: TranscriptMessage[]; completedExercises: Exercise[] }) => {
+    voice.stop()
+    if (typeof window !== 'undefined') {
+      const storageKey = sessionId ? `session-transcript:${sessionId}` : 'session-transcript:pending'
+      window.sessionStorage.setItem(storageKey, JSON.stringify(payload))
+    }
+    const query = sessionId ? `?session=${sessionId}` : ''
+    router.push(`/training/feedback${query}`)
+  }
+
   if (isLoading) {
     return (
       <main
@@ -89,7 +100,7 @@ export default function TrainingSessionPage() {
   return (
     <SessionPlayer
       exercises={exercises}
-      onComplete={handleComplete}
+      onComplete={handleSessionComplete}
       speak={(text) => voice.speak(text)}
     />
   )

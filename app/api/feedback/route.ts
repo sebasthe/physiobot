@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { anthropic } from '@/lib/claude/client'
 import { buildSystemPrompt, buildFeedbackPrompt } from '@/lib/claude/prompts'
 import { extractJson } from '@/lib/claude/extract-json'
-import { extractAndStoreMemories, getRelevantMemories } from '@/lib/mem0'
+import { addSessionTranscript, extractAndStoreMemories, getRelevantMemories, type TranscriptMessage } from '@/lib/mem0'
+import { updateGamification } from '@/lib/gamification'
 import type { SessionFeedback, UserPersonality, Exercise } from '@/lib/types'
 
 export async function POST(request: Request) {
@@ -11,10 +12,15 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { sessionId, feedback } = await request.json() as {
+  const body = await request.json() as {
+    transcript?: TranscriptMessage[]
+    exercises?: Exercise[]
     sessionId: string | null
     feedback: SessionFeedback[]
   }
+  const { sessionId, feedback } = body
+  const transcript = body.transcript ?? []
+  const completedExercises = body.exercises ?? []
 
   // Save feedback to session if we have a session ID
   if (sessionId) {
@@ -29,6 +35,9 @@ export async function POST(request: Request) {
   if (painfulExercises.length > 0) {
     const summary = `Session-Feedback: Schmerzhafte Übungen: ${painfulExercises.map((f: SessionFeedback) => f.notes ?? f.exercise_id).join(', ')}`
     await extractAndStoreMemories(user.id, summary).catch(console.error)
+  }
+  if (transcript.length > 0) {
+    await addSessionTranscript(user.id, transcript, sessionId ?? undefined).catch(console.error)
   }
 
   // Get current plan + user context
@@ -46,6 +55,16 @@ export async function POST(request: Request) {
     .single()
 
   if (!plan) return NextResponse.json({ ok: true })
+
+  const gamification = await updateGamification(
+    supabase,
+    user.id,
+    completedExercises.length > 0 ? completedExercises : (plan.exercises as Exercise[]),
+    sessionId ?? undefined
+  ).catch(err => {
+    console.error('Gamification update failed:', err)
+    return null
+  })
 
   const memoryTexts = await getRelevantMemories(
     user.id,
@@ -96,5 +115,5 @@ export async function POST(request: Request) {
     console.error('Plan adjustment failed:', err)
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, gamification })
 }

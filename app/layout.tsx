@@ -1,15 +1,16 @@
 import type { Metadata } from 'next'
-import { Bebas_Neue, Plus_Jakarta_Sans } from 'next/font/google'
+import { DM_Sans, Fraunces } from 'next/font/google'
 import './globals.css'
 
-const bebasNeue = Bebas_Neue({
+const fraunces = Fraunces({
   variable: '--font-display',
-  weight: '400',
   subsets: ['latin'],
+  weight: ['300', '600', '700'],
+  style: ['normal', 'italic'],
   display: 'swap',
 })
 
-const plusJakartaSans = Plus_Jakarta_Sans({
+const dmSans = DM_Sans({
   variable: '--font-body',
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
@@ -17,13 +18,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'PhysioBot',
+  title: 'PhysioCoach',
   description: 'Dein AI-Physiotherapie-Coach',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'PhysioBot',
+    statusBarStyle: 'default',
+    title: 'PhysioCoach',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -36,14 +37,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="de" className="dark" suppressHydrationWarning>
+    <html lang="de" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#0D0B09" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#1D7A6A" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
       <body
-        className={`${bebasNeue.variable} ${plusJakartaSans.variable} antialiased`}
+        className={`${fraunces.variable} ${dmSans.variable} antialiased`}
       >
         {children}
       </body>
