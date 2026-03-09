@@ -38,15 +38,32 @@ export class ElevenLabsRealtimeOrchestrator {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-        },
+          sampleRate: 48000,
+          sampleSize: 16,
+        } as MediaTrackConstraints,
       })
     } catch {
       throw new Error('Mikrofonzugriff wurde verweigert oder ist nicht verfügbar')
     }
 
-    this.audioContext = new AudioContext()
+    const [track] = this.stream.getAudioTracks()
+    try {
+      await track?.applyConstraints({
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      } as MediaTrackConstraints)
+    } catch {
+      // Fallback silently on browsers that don't support runtime constraints
+    }
+
+    this.audioContext = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 })
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume().catch(() => undefined)
+    }
     this.sourceNode = this.audioContext.createMediaStreamSource(this.stream)
-    this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1)
+    this.processorNode = this.audioContext.createScriptProcessor(2048, 1, 1)
     this.sinkGainNode = this.audioContext.createGain()
     this.sinkGainNode.gain.value = 0
 
@@ -114,6 +131,7 @@ export class ElevenLabsRealtimeOrchestrator {
 
     this.processorNode.onaudioprocess = event => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+      if (this.ws.bufferedAmount > 128000) return
       const channelData = event.inputBuffer.getChannelData(0)
       const pcm16 = downsampleToPcm16(channelData, this.audioContext?.sampleRate ?? 44100, 16000)
       if (pcm16.length === 0) return

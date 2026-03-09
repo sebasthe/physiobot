@@ -84,6 +84,10 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const realtimeOrchestratorRef = useRef<ElevenLabsRealtimeOrchestrator | null>(null)
   const listeningIdleTimerRef = useRef<number | null>(null)
   const pendingTurnControllerRef = useRef<AbortController | null>(null)
+  const speechQueueRef = useRef<string[]>([])
+  const speechQueueBusyRef = useRef(false)
+  const autoSendTimerRef = useRef<number | null>(null)
+  const pendingTranscriptRef = useRef<string | null>(null)
   const userTranscriptRef = useRef('')
   const skipAutoSpeakRef = useRef(false)
   const activeTurnStartedAtRef = useRef<number | null>(null)
@@ -138,6 +142,39 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     }).catch(() => undefined)
   }
 
+  const clearAutoSendTimer = () => {
+    if (autoSendTimerRef.current) {
+      window.clearTimeout(autoSendTimerRef.current)
+      autoSendTimerRef.current = null
+    }
+  }
+
+  const clearSpeechQueue = () => {
+    speechQueueRef.current = []
+    speechQueueBusyRef.current = false
+  }
+
+  const processSpeechQueue = async () => {
+    if (speechQueueBusyRef.current) return
+    speechQueueBusyRef.current = true
+    try {
+      while (speechQueueRef.current.length > 0) {
+        const part = speechQueueRef.current.shift()
+        if (!part) continue
+        await speakWithStatus(part)
+      }
+    } finally {
+      speechQueueBusyRef.current = false
+    }
+  }
+
+  const enqueueSpeechChunk = (chunk: string) => {
+    const trimmed = chunk.trim()
+    if (!trimmed) return
+    speechQueueRef.current.push(trimmed)
+    void processSpeechQueue()
+  }
+
   const clearListeningIdleTimer = () => {
     if (listeningIdleTimerRef.current) {
       window.clearTimeout(listeningIdleTimerRef.current)
@@ -180,11 +217,17 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     }
   }
 
-  const interruptAgent = () => {
+  const interruptAgent = (reason: 'user' | 'turn_start' = 'user') => {
+    const wasSpeakingOrPending = Boolean(pendingTurnControllerRef.current) || speechQueueBusyRef.current
     pendingTurnControllerRef.current?.abort()
     pendingTurnControllerRef.current = null
+    clearAutoSendTimer()
+    pendingTranscriptRef.current = null
+    clearSpeechQueue()
     stopSpeaking?.()
-    trackVoiceEvent('interrupt', { mode })
+    if (reason === 'user' && wasSpeakingOrPending) {
+      trackVoiceEvent('interrupt', { mode })
+    }
     setAgentStatus('hoert_zu')
   }
 
@@ -194,7 +237,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     setVoiceHint(undefined)
     userTranscriptRef.current = ''
     setUserTranscript('')
-    interruptAgent()
+    interruptAgent('user')
     stopAllListening()
     activeTurnStartedAtRef.current = Date.now()
     trackVoiceEvent('listen_started', { sttMode: 'realtime', exerciseIndex: currentIndex })
@@ -224,10 +267,9 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
         clearListeningIdleTimer()
         stopRealtimeListening()
         if (text.trim()) {
-          trackVoiceEvent('transcript_committed', { chars: text.trim().length, sttMode: 'realtime' })
           setMode('coach')
           setAgentStatus('versteht')
-          void sendUserMessage(text.trim())
+          queueCommittedTranscript(text.trim(), 'realtime')
         } else {
           setMode('coach')
           setAgentStatus('bereit')
@@ -281,6 +323,9 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       cancelled = true
       pendingTurnControllerRef.current?.abort()
       pendingTurnControllerRef.current = null
+      clearAutoSendTimer()
+      pendingTranscriptRef.current = null
+      clearSpeechQueue()
       stopAllListening()
     }
   }, [])
@@ -363,6 +408,9 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const handleStop = () => {
     pendingTurnControllerRef.current?.abort()
     pendingTurnControllerRef.current = null
+    clearAutoSendTimer()
+    pendingTranscriptRef.current = null
+    clearSpeechQueue()
     stopAllListening()
     stopSpeaking?.()
     onComplete({ transcript, completedExercises: exercises.slice(0, Math.max(1, currentIndex)) })
@@ -411,7 +459,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     }
 
     recognitionRef.current?.stop()
-    interruptAgent()
+    interruptAgent('user')
     activeTurnStartedAtRef.current = Date.now()
     trackVoiceEvent('listen_started', { sttMode: 'browser', exerciseIndex: currentIndex })
     const recognition = new Recognition()
@@ -440,9 +488,8 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     recognition.onend = () => {
       clearListeningIdleTimer()
       if (userTranscriptRef.current.trim()) {
-        trackVoiceEvent('transcript_committed', { chars: userTranscriptRef.current.trim().length, sttMode: 'browser' })
         setAgentStatus('versteht')
-        void sendUserMessage(userTranscriptRef.current.trim())
+        queueCommittedTranscript(userTranscriptRef.current.trim(), 'browser')
       } else {
         setMode('coach')
         setAgentStatus('bereit')
@@ -466,6 +513,25 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     }
   }
 
+  const queueCommittedTranscript = (text: string, source: 'realtime' | 'browser') => {
+    const cleaned = text.trim()
+    if (!cleaned) return
+    pendingTranscriptRef.current = cleaned
+    setTypedMessage(cleaned)
+    setUserTranscript(cleaned)
+    setVoiceHint('Transkript erkannt. Du kannst sofort korrigieren, sonst sende ich automatisch.')
+    trackVoiceEvent('transcript_committed', { chars: cleaned.length, sttMode: source })
+    clearAutoSendTimer()
+    autoSendTimerRef.current = window.setTimeout(() => {
+      const pending = pendingTranscriptRef.current
+      pendingTranscriptRef.current = null
+      autoSendTimerRef.current = null
+      if (!pending) return
+      setVoiceHint(undefined)
+      void sendUserMessage(pending)
+    }, 700)
+  }
+
   const sendUserMessage = async (message: string) => {
     const trimmedMessage = message.trim()
     if (!trimmedMessage) return
@@ -474,13 +540,15 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       activeTurnStartedAtRef.current = Date.now()
     }
     stopAllListening()
-    interruptAgent()
+    interruptAgent('turn_start')
     setIsResponding(true)
     setAgentStatus('versteht')
     setIsPaused(false)
     setVoiceHint(undefined)
     setUserTranscript(trimmedMessage)
     setTypedMessage('')
+    pendingTranscriptRef.current = null
+    clearAutoSendTimer()
     const messages = [...transcript, { role: 'user' as const, content: trimmedMessage }]
     setTranscript(messages)
     try {
@@ -488,7 +556,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       pendingTurnControllerRef.current?.abort()
       pendingTurnControllerRef.current = controller
 
-      const response = await fetch('/api/voice/realtime', {
+      const response = await fetch('/api/voice/realtime/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -498,21 +566,96 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
         }),
       })
       if (!response.ok) throw new Error('Realtime turn failed')
-      const data = await response.json()
-      const reply = typeof data.reply === 'string' && data.reply.trim()
-        ? data.reply.trim()
-        : 'Okay, wir machen es einfacher. Langsam und ohne Druck.'
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No stream body')
+      const decoder = new TextDecoder()
+
+      let streamBuffer = ''
+      let assistantReply = ''
+      let unsentSpeechBuffer = ''
+      let gotDone = false
+      let llmLatencyMsFromServer: number | null = null
+      let totalLatencyMsFromServer: number | null = null
+
+      const flushSpeechBuffer = (force: boolean) => {
+        const parts = unsentSpeechBuffer.split(/(?<=[.!?…])\s+/)
+        const emit = force ? parts : parts.slice(0, -1)
+        for (const part of emit) {
+          if (part.trim()) enqueueSpeechChunk(part)
+        }
+        unsentSpeechBuffer = force ? '' : (parts[parts.length - 1] ?? '')
+      }
+
+      const handleSseEvent = (rawEvent: string) => {
+        const dataLines = rawEvent
+          .split('\n')
+          .filter(line => line.startsWith('data:'))
+          .map(line => line.slice(5).trim())
+        if (dataLines.length === 0) return
+        let payload: { type?: string; text?: string; reply?: string; llmLatencyMs?: number; totalLatencyMs?: number } | null = null
+        try {
+          payload = JSON.parse(dataLines.join('\n')) as { type?: string; text?: string; reply?: string; llmLatencyMs?: number; totalLatencyMs?: number }
+        } catch {
+          return
+        }
+        if (!payload?.type) return
+
+        if (payload.type === 'delta' && payload.text) {
+          assistantReply += payload.text
+          unsentSpeechBuffer += payload.text
+          setCoachTranscript(assistantReply)
+          setMode('coach')
+          flushSpeechBuffer(false)
+          return
+        }
+
+        if (payload.type === 'done') {
+          const reply = payload.reply?.trim() || assistantReply.trim()
+          if (reply) {
+            assistantReply = reply
+            setCoachTranscript(reply)
+          }
+          llmLatencyMsFromServer = typeof payload.llmLatencyMs === 'number' ? payload.llmLatencyMs : null
+          totalLatencyMsFromServer = typeof payload.totalLatencyMs === 'number' ? payload.totalLatencyMs : null
+          flushSpeechBuffer(true)
+          gotDone = true
+          return
+        }
+
+        if (payload.type === 'error') {
+          throw new Error('Realtime stream error')
+        }
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        streamBuffer += decoder.decode(value, { stream: true })
+        while (true) {
+          const separatorIndex = streamBuffer.indexOf('\n\n')
+          if (separatorIndex === -1) break
+          const rawEvent = streamBuffer.slice(0, separatorIndex)
+          streamBuffer = streamBuffer.slice(separatorIndex + 2)
+          handleSseEvent(rawEvent)
+        }
+      }
+
+      if (streamBuffer.trim()) {
+        handleSseEvent(streamBuffer)
+      }
+
+      const finalReply = assistantReply.trim() || 'Okay, wir machen es einfacher. Langsam und ohne Druck.'
+      if (!gotDone) {
+        flushSpeechBuffer(true)
+      }
       trackVoiceEvent('agent_reply_received', {
-        llmLatencyMs: typeof data.llmLatencyMs === 'number'
-          ? data.llmLatencyMs
-          : Math.max(0, Date.now() - (activeTurnStartedAtRef.current ?? Date.now())),
-        totalLatencyMs: typeof data.totalLatencyMs === 'number' ? data.totalLatencyMs : null,
-        chars: reply.length,
+        llmLatencyMs: llmLatencyMsFromServer ?? Math.max(0, Date.now() - (activeTurnStartedAtRef.current ?? Date.now())),
+        totalLatencyMs: totalLatencyMsFromServer,
+        chars: finalReply.length,
       })
-      setCoachTranscript(reply)
-      setTranscript(prev => [...prev, { role: 'assistant', content: reply }])
+      setCoachTranscript(finalReply)
+      setTranscript(prev => [...prev, { role: 'assistant', content: finalReply }])
       setMode('coach')
-      await speakWithStatus(reply)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setIsResponding(false)
@@ -728,7 +871,15 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
                 >
                   <input
                     value={typedMessage}
-                    onChange={event => setTypedMessage(event.target.value)}
+                    onChange={event => {
+                      const next = event.target.value
+                      setTypedMessage(next)
+                      if (pendingTranscriptRef.current !== null) {
+                        pendingTranscriptRef.current = null
+                        clearAutoSendTimer()
+                        setVoiceHint('Auto-Senden pausiert. Prüfe den Text und sende manuell.')
+                      }
+                    }}
                     onKeyDown={event => {
                       if (event.key === 'Enter') {
                         event.preventDefault()
@@ -775,7 +926,11 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
                   🎙
                 </button>
                 <button
-                  onClick={() => void sendUserMessage(typedMessage)}
+                  onClick={() => {
+                    pendingTranscriptRef.current = null
+                    clearAutoSendTimer()
+                    void sendUserMessage(typedMessage)
+                  }}
                   disabled={isResponding || isPaused || !typedMessage.trim()}
                   className="rounded-full border px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                   style={{ background: 'rgba(29,122,106,0.35)', borderColor: 'rgba(255,255,255,0.08)' }}

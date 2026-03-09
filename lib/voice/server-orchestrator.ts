@@ -14,6 +14,15 @@ interface VoiceOrchestratorResult {
   llmLatencyMs: number
 }
 
+interface VoiceOrchestrationPrompt {
+  system: string
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+}
+
+export type VoiceTurnStreamChunk =
+  | { type: 'delta'; text: string }
+  | { type: 'done'; reply: string; llmLatencyMs: number }
+
 function getPhaseHint(phase: string | undefined) {
   if (phase === 'warmup') {
     return 'Phase-Hinweis: ruhiger Einstieg, Sicherheit, Atmung, keine Überforderung.'
@@ -28,6 +37,68 @@ export async function runVoiceTurnOrchestration(
   supabase: any,
   input: VoiceOrchestratorInput
 ): Promise<VoiceOrchestratorResult> {
+  const prompt = await buildVoiceOrchestrationPrompt(supabase, input)
+  const llmStart = Date.now()
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 300,
+    system: prompt.system,
+    messages: prompt.messages,
+  })
+
+  const content = response.content.find(item => item.type === 'text')
+  if (!content || content.type !== 'text') {
+    throw new Error('No response text returned')
+  }
+
+  return {
+    reply: content.text.trim(),
+    llmLatencyMs: Math.max(0, Date.now() - llmStart),
+  }
+}
+
+export async function* streamVoiceTurnOrchestration(
+  supabase: any,
+  input: VoiceOrchestratorInput
+): AsyncGenerator<VoiceTurnStreamChunk> {
+  const prompt = await buildVoiceOrchestrationPrompt(supabase, input)
+  const llmStart = Date.now()
+  const stream = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 300,
+    stream: true,
+    system: prompt.system,
+    messages: prompt.messages,
+  })
+
+  let fullReply = ''
+  let firstDeltaAt: number | null = null
+  for await (const event of stream as any) {
+    if (event?.type !== 'content_block_delta') continue
+    if (event?.delta?.type !== 'text_delta') continue
+    const text = typeof event.delta.text === 'string' ? event.delta.text : ''
+    if (!text) continue
+    if (!firstDeltaAt) firstDeltaAt = Date.now()
+    fullReply += text
+    yield { type: 'delta', text }
+  }
+
+  const reply = fullReply.trim()
+  if (!reply) {
+    throw new Error('No response text returned')
+  }
+
+  yield {
+    type: 'done',
+    reply,
+    llmLatencyMs: firstDeltaAt ? Math.max(0, firstDeltaAt - llmStart) : Math.max(0, Date.now() - llmStart),
+  }
+}
+
+async function buildVoiceOrchestrationPrompt(
+  supabase: any,
+  input: VoiceOrchestratorInput
+): Promise<VoiceOrchestrationPrompt> {
   const [{ data: healthProfile }, { data: profile }, { data: streakRow }, { data: sessions }] = await Promise.all([
     supabase.from('health_profiles').select('complaints').eq('user_id', input.userId).maybeSingle(),
     supabase.from('profiles').select('name').eq('id', input.userId).maybeSingle(),
@@ -77,21 +148,5 @@ export async function runVoiceTurnOrchestration(
     }))),
   ]
 
-  const llmStart = Date.now()
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
-    system,
-    messages,
-  })
-
-  const content = response.content.find(item => item.type === 'text')
-  if (!content || content.type !== 'text') {
-    throw new Error('No response text returned')
-  }
-
-  return {
-    reply: content.text.trim(),
-    llmLatencyMs: Math.max(0, Date.now() - llmStart),
-  }
+  return { system, messages }
 }

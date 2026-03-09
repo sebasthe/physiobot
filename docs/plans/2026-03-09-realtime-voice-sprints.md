@@ -25,13 +25,13 @@ Datum: 2026-03-09
 - `app/training/session/page.tsx`
 - `lib/voice/elevenlabs.ts` (vorheriger Fallback-Fix bleibt aktiv)
 
-## Sprint 2 (Feinschliff - offen)
+## Sprint 2 (Feinschliff - umgesetzt)
 - [x] ElevenLabs Streaming-TTS-End-to-End (progressives HTTP-Streaming für frühere Wiedergabe).
 - [x] Serverseitige dedizierte Turn-Orchestrierung über eigene Realtime-API (`/api/voice/realtime`) und Orchestrator-Service.
 - [x] Telemetrie-Basis: Turn-Latenz, STT-Fehlerraten, Interrupt- und Fallback-Events.
 - [x] Adaptive Prompting je Übungsphase (Warmup/Main/Cooldown Response-Hints).
-- [ ] Verbesserte Noise-/Echo-Strategien für iPhone Lautsprecherbetrieb.
-- [ ] Robustere Transcript-Korrektur inkl. „vor Senden editieren“ für Realtime-Commits.
+- [x] Verbesserte Noise-/Echo-Strategien für iPhone Lautsprecherbetrieb (Track-Constraints, niedrigere Audio-Buffer, Backpressure-Schutz).
+- [x] Robustere Transcript-Korrektur inkl. „vor Senden editieren“ für Realtime-Commits (Auto-Send-Delay + manuelle Korrektur).
 
 ## Akzeptanzkriterien Sprint 2
 1. Median E2E-Latenz Ende Nutzersprechen -> erste Agenten-Audioausgabe < 800 ms.
@@ -40,5 +40,6 @@ Datum: 2026-03-09
 4. Graceful Degradation bei API-Limits/Netzproblemen.
 
 ## Hinweis zur Architektur
-- WebSocket-Full-Duplex-Orchestrierung bleibt optional als späterer Schritt.  
-  Aktuell ist die serverseitige Turn-Orchestrierung dediziert ausgelagert und über Realtime-HTTP-Endpoints angebunden.
+- WebSocket-Full-Duplex-Orchestrierung bleibt optional als späterer Schritt.
+- Aktuell ist die serverseitige Turn-Orchestrierung dediziert ausgelagert und über Realtime-HTTP-Endpoints angebunden.
+- Agent-Antworten werden serverseitig als SSE gestreamt (`/api/voice/realtime/stream`) und clientseitig inkrementell gesprochen.
