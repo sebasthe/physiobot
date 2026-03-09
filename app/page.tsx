@@ -1,6 +1,17 @@
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import TransitionLink from '@/components/navigation/TransitionLink'
+import { createClient } from '@/lib/supabase/server'
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    redirect('/dashboard')
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
       {/* Ambient glow */}
@@ -26,19 +37,19 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col gap-3 pt-4">
-          <Link
+          <TransitionLink
             href="/auth/register"
             className="btn-primary inline-flex items-center justify-center rounded-xl px-8 py-4 font-display text-lg tracking-widest uppercase"
           >
             Loslegen
-          </Link>
-          <Link
+          </TransitionLink>
+          <TransitionLink
             href="/auth/login"
             className="inline-flex items-center justify-center rounded-xl px-8 py-4 text-sm transition-colors"
             style={{ color: 'var(--text-secondary)' }}
           >
             Bereits registriert? Anmelden
-          </Link>
+          </TransitionLink>
         </div>
       </div>
     </main>
