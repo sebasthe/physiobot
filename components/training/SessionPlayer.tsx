@@ -53,10 +53,10 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
-  const [animKey, setAnimKey] = useState(0)
   const isTestEnv = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)
   const [mode, setMode] = useState<SessionMode>(isTestEnv ? 'coach' : 'pre')
   const [hasStarted, setHasStarted] = useState(isTestEnv)
+  const [isPaused, setIsPaused] = useState(false)
   const [coachTranscript, setCoachTranscript] = useState('')
   const [userTranscript, setUserTranscript] = useState('')
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([])
@@ -80,10 +80,29 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   const current = exercises[currentIndex]
   const totalDuration = current.duration_seconds ?? null
   const completedExercises = useMemo(() => exercises.slice(0, currentIndex + 1), [currentIndex, exercises])
-  const progress =
+  const progress = totalDuration && timeLeft !== null
+    ? ((totalDuration - timeLeft) / totalDuration) * 100
+    : null
+  const estimatedExerciseSeconds = useMemo(
+    () => exercises.map(ex => ex.duration_seconds ?? 45),
+    [exercises]
+  )
+  const sessionSecondsLeft = useMemo(() => {
+    const remaining = estimatedExerciseSeconds
+      .slice(currentIndex + 1)
+      .reduce((sum, value) => sum + value, 0)
+    const currentRemaining = timeLeft ?? estimatedExerciseSeconds[currentIndex]
+    return Math.max(0, currentRemaining + remaining)
+  }, [currentIndex, estimatedExerciseSeconds, timeLeft])
+  const ringPercent = Math.round(
     totalDuration && timeLeft !== null
       ? ((totalDuration - timeLeft) / totalDuration) * 100
-      : null
+      : ((currentIndex + 1) / exercises.length) * 100
+  )
+  const nextExercise = exercises[currentIndex + 1]
+  const nextLabel = nextExercise
+    ? `${nextExercise.name} · ${nextExercise.duration_seconds ? `${nextExercise.duration_seconds}s` : `${nextExercise.sets ?? 1}×${nextExercise.repetitions ?? 8}`}`
+    : 'Session abschließen'
 
   useEffect(() => {
     const Recognition = typeof window !== 'undefined'
@@ -95,10 +114,15 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   useEffect(() => {
     if (!hasStarted) return
 
+    setMode('coach')
+    setIsPaused(false)
     setCoachTranscript(current.voice_script)
-    setTranscript(prev => [...prev, { role: 'assistant', content: current.voice_script }])
+    setTranscript(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.role === 'assistant' && last.content === current.voice_script) return prev
+      return [...prev, { role: 'assistant', content: current.voice_script }]
+    })
     speak(current.voice_script)
-    setAnimKey(k => k + 1)
     if (current.duration_seconds) {
       setTimeLeft(current.duration_seconds)
     } else {
@@ -109,10 +133,10 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   }, [currentIndex, current, hasStarted])
 
   useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return
+    if (!hasStarted || isPaused || timeLeft === null || timeLeft <= 0) return
     const timer = setTimeout(() => setTimeLeft(t => (t ?? 1) - 1), 1000)
     return () => clearTimeout(timer)
-  }, [timeLeft])
+  }, [hasStarted, isPaused, timeLeft])
 
   const handleNext = () => {
     if (isLast) {
@@ -120,6 +144,25 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     } else {
       setCurrentIndex(i => i + 1)
     }
+  }
+
+  const handleRepeat = async () => {
+    if (!hasStarted) return
+    setMode('coach')
+    setCoachTranscript(current.voice_script)
+    await speak(current.voice_script)
+  }
+
+  const handlePauseToggle = () => {
+    setIsPaused(prev => {
+      const next = !prev
+      if (next) recognitionRef.current?.stop()
+      return next
+    })
+  }
+
+  const handleStop = () => {
+    onComplete({ transcript, completedExercises: exercises.slice(0, Math.max(1, currentIndex)) })
   }
 
   const startSession = () => {
@@ -172,15 +215,17 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     if (!trimmedMessage) return
 
     setIsResponding(true)
+    setIsPaused(false)
     setUserTranscript(trimmedMessage)
     setTypedMessage('')
-    setTranscript(prev => [...prev, { role: 'user', content: trimmedMessage }])
+    const messages = [...transcript, { role: 'user' as const, content: trimmedMessage }]
+    setTranscript(messages)
     try {
       const response = await fetch('/api/voice/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...transcript, { role: 'user', content: trimmedMessage }],
+          messages,
           currentExercise: current,
         }),
       })
@@ -219,15 +264,29 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
       <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'linear-gradient(rgba(59,184,154,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(59,184,154,0.04) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
       <div className="relative z-10 flex min-h-screen flex-col">
         {mode === 'pre' ? (
-          <div className="flex flex-1 flex-col items-center justify-center px-7 text-center text-white">
-            <div className="absolute left-1/2 top-1/2 h-[16rem] w-[16rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10" style={{ animation: 'waveOut 3s ease-out infinite' }} />
-            <div className="absolute left-1/2 top-1/2 h-[21rem] w-[21rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/8" style={{ animation: 'waveOut 3s ease-out infinite', animationDelay: '0.7s' }} />
-            <div className="relative z-10 mb-7 flex h-32 w-32 items-center justify-center rounded-full text-6xl" style={{ background: 'linear-gradient(135deg,#1D7A6A,#3BB89A)', boxShadow: '0 0 60px rgba(59,184,154,0.3)' }}>
-              🩺
+          <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-7 text-center text-white">
+            <div className="relative z-10 mb-7 flex h-[26rem] w-[26rem] items-center justify-center">
+              <div
+                className="absolute left-1/2 top-1/2 h-[16rem] w-[16rem] rounded-full border border-[rgba(59,184,154,0.22)]"
+                style={{ animation: 'ringPulseCentered 3s ease-in-out infinite both' }}
+              />
+              <div
+                className="absolute left-1/2 top-1/2 h-[21rem] w-[21rem] rounded-full border border-[rgba(59,184,154,0.17)]"
+                style={{ animation: 'ringPulseCentered 3s ease-in-out infinite both', animationDelay: '0.6s' }}
+              />
+              <div
+                className="absolute left-1/2 top-1/2 h-[26rem] w-[26rem] rounded-full border border-[rgba(59,184,154,0.12)]"
+                style={{ animation: 'ringPulseCentered 3s ease-in-out infinite both', animationDelay: '1.2s' }}
+              />
+              <div className="relative flex h-[8.125rem] w-[8.125rem] items-center justify-center rounded-full text-6xl" style={{ background: 'linear-gradient(135deg,#1D7A6A,#3BB89A)', boxShadow: '0 0 60px rgba(59,184,154,0.3)' }}>
+                🩺
+              </div>
             </div>
             <p className="text-phase mb-3 text-[var(--teal-light)]">Dr. Mia ist bereit</p>
-            <h1 className="font-display text-4xl leading-tight text-white">
-              Bereit für heute?
+            <h1 className="font-display text-[2rem] leading-[1.2] text-white">
+              Guten Morgen,<br />
+              <em>du.</em><br />
+              Heute geht&apos;s los.
             </h1>
             <p className="mt-4 max-w-sm text-sm leading-6 text-white/65">
               {exercises.length} Übungen, ruhiger Fokus und ich bleibe die ganze Zeit bei dir. Du kannst jederzeit mit mir sprechen.
@@ -241,16 +300,26 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
               onClick={startSession}
               className="mt-8 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-[var(--teal)] text-2xl text-white shadow-[0_0_0_0_rgba(59,184,154,0.4)]"
               style={{ animation: 'pulse-glow 2s ease infinite' }}
+              aria-label="Session starten"
             >
-              ▶
+              <svg viewBox="0 0 24 24" className="h-7 w-7 translate-x-[1px]" fill="currentColor" aria-hidden="true">
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
             </button>
             <p className="mt-3 text-sm text-white/45">Tippen zum Starten, dann Handy weglegen</p>
           </div>
         ) : (
           <>
-        <div className="px-6 pb-12 pt-[max(1.5rem,var(--safe-top))] text-white">
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        <div
+          className="px-6 pb-7 pt-[max(1rem,var(--safe-top))] text-white"
+          style={{
+            background: mode === 'listening'
+              ? 'linear-gradient(180deg, #1A0E0A 0%, #1A1209 100%)'
+              : 'linear-gradient(180deg, #0A1714 0%, #0F1F1C 100%)',
+          }}
+        >
+          <div className="mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
               <div className="flex gap-1">
                 {progressDots.map((state, index) => (
                   <div
@@ -266,141 +335,260 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
               <span className="text-xs text-white/55">{currentIndex + 1}/{exercises.length}</span>
             </div>
             <div className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-sm font-bold tabular-nums">
-              {timeLeft !== null ? `0:${String(timeLeft).padStart(2, '0')}` : 'Wdh.'}
+              {String(Math.floor(sessionSecondsLeft / 60)).padStart(2, '0')}:{String(sessionSecondsLeft % 60).padStart(2, '0')}
             </div>
           </div>
 
-          <div className="relative mb-8 flex justify-center">
-            <div className="absolute left-1/2 top-1/2 h-[6.5rem] w-[6.5rem] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-60" style={{ borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)', animation: 'waveOut 1.8s ease-out infinite' }} />
-            <div className="absolute left-1/2 top-1/2 h-[6.5rem] w-[6.5rem] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-60" style={{ borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)', animation: 'waveOut 1.8s ease-out infinite', animationDelay: '0.6s' }} />
-            <div className="absolute left-1/2 top-1/2 h-[6.5rem] w-[6.5rem] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-60" style={{ borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)', animation: 'waveOut 1.8s ease-out infinite', animationDelay: '1.2s' }} />
-            <div className="relative z-10 flex h-28 w-28 items-center justify-center rounded-full text-5xl" style={{ background: mode === 'listening' ? 'linear-gradient(135deg,#7B1F10,#F0724A,#F5A26A)' : 'linear-gradient(135deg,#1D7A6A,#3BB89A,#6FD4C0)', animation: 'floatBob 4s ease-in-out infinite', boxShadow: mode === 'listening' ? '0 0 40px rgba(240,114,74,0.45)' : '0 0 40px rgba(59,184,154,0.4)' }}>
-              🩺
-            </div>
-          </div>
-
-          <div key={`content-${animKey}`} className="animate-slide-up text-center">
-            <div className="text-phase mb-2 text-[var(--teal-light)]">{PHASE_LABELS[current.phase] ?? current.phase.toUpperCase()}</div>
-            <h2 className="font-display text-4xl leading-tight text-white">{current.name}</h2>
-            <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-white/65">{current.description}</p>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-white/8 bg-white/4 p-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: mode === 'listening' ? 'rgba(240,114,74,0.7)' : 'rgba(168,240,224,0.6)' }}>
-              {mode === 'listening' ? 'Du sprichst' : 'Dr. Mia spricht'}
-            </p>
-            <p className="min-h-12 text-sm leading-6 text-white/90 italic">
-              {mode === 'listening' ? (userTranscript || 'Ich höre zu…') : (coachTranscript || current.voice_script)}
-            </p>
-          </div>
-
-          <div className="mt-4 flex items-center gap-3">
-            <div
-              className="flex min-h-11 flex-1 items-center gap-2 rounded-full border px-4"
-              style={{
-                background: mode === 'listening' ? 'rgba(240,114,74,0.05)' : 'rgba(255,255,255,0.04)',
-                borderColor: mode === 'listening' ? 'rgba(240,114,74,0.35)' : 'rgba(255,255,255,0.08)',
-              }}
-            >
-              <input
-                value={typedMessage}
-                onChange={event => setTypedMessage(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void sendUserMessage(typedMessage)
-                  }
+          <div className="relative mb-4 flex justify-center">
+            <div className="relative h-24 w-24">
+              <div
+                className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 rounded-full border-2"
+                style={{
+                  borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)',
+                  animation: 'waveOutCentered 1.8s ease-out infinite',
+                  animationDelay: '0s',
+                  transform: 'translate(-50%, -50%)',
                 }}
-                placeholder={isMicAvailable ? 'Schreib Dr. Mia eine Frage…' : 'Mikrofon nicht verfügbar, tippe hier…'}
-                className="h-11 flex-1 bg-transparent text-sm text-white placeholder:text-white/35 focus:outline-none"
-                aria-label="Nachricht an Dr. Mia"
               />
-              <div className="flex items-center gap-[3px]">
-                {Array.from({ length: 5 }).map((_, index) => (
+              <div
+                className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 rounded-full border-2"
+                style={{
+                  borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)',
+                  animation: 'waveOutCentered 1.8s ease-out infinite',
+                  animationDelay: '0.6s',
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+              <div
+                className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 rounded-full border-2"
+                style={{
+                  borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)',
+                  animation: 'waveOutCentered 1.8s ease-out infinite',
+                  animationDelay: '1.2s',
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+              <div
+                className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full text-5xl"
+                style={{
+                  background: mode === 'listening'
+                    ? 'linear-gradient(135deg,#7B1F10,#F0724A,#F5A26A)'
+                    : 'linear-gradient(135deg,#1D7A6A,#3BB89A,#6FD4C0)',
+                  animation: 'floatBob 4s ease-in-out infinite',
+                  boxShadow: mode === 'listening'
+                    ? '0 0 40px rgba(240,114,74,0.45)'
+                    : '0 0 40px rgba(59,184,154,0.4)',
+                }}
+              >
+                🩺
+              </div>
+            </div>
+          </div>
+
+          {mode === 'listening' ? (
+            <>
+              <div className="mb-4 flex items-center justify-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-[var(--peach)] animate-pulse" />
+                <span className="text-xs font-bold uppercase tracking-[0.08em] text-[rgba(240,114,74,0.9)]">Dr. Mia hört zu</span>
+              </div>
+              <div className="rounded-2xl border border-[rgba(240,114,74,0.2)] bg-[rgba(240,114,74,0.08)] p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(240,114,74,0.65)]">Du sagst</p>
+                <p className="text-[15px] leading-7 text-white/90">
+                  {userTranscript || 'Ich höre zu…'}
+                </p>
+              </div>
+              <div className="mb-3 mt-3 flex h-10 items-end justify-center gap-[3px]">
+                {Array.from({ length: 12 }).map((_, index) => (
                   <div
                     key={index}
-                    className="w-[2px] rounded-full"
+                    className="w-[3px] rounded bg-[var(--peach)]"
                     style={{
-                      height: `${[4, 10, 7, 12, 5][index]}px`,
-                      background: mode === 'listening' ? 'var(--peach)' : 'rgba(255,255,255,0.2)',
-                      animation: mode === 'listening' ? `pulse-glow 0.5s ease-in-out ${index * 0.08}s infinite alternate` : undefined,
+                      height: `${[8, 20, 14, 28, 10, 24, 16, 30, 12, 22, 8, 18][index]}px`,
+                      animation: `pulse-glow ${0.35 + (index % 3) * 0.1}s ease-in-out ${index * 0.08}s infinite alternate`,
                     }}
                   />
                 ))}
               </div>
-            </div>
-            <button
-              onClick={startListening}
-              disabled={!isMicAvailable || isResponding}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-white disabled:opacity-50"
-              style={{ background: 'var(--peach)', boxShadow: '0 4px 12px rgba(240,114,74,0.35)' }}
-              aria-label="Mit Dr. Mia sprechen"
-            >
-              🎙
-            </button>
-            <button
-              onClick={() => void sendUserMessage(typedMessage)}
-              disabled={isResponding || !typedMessage.trim()}
-              className="flex h-10 min-w-14 items-center justify-center rounded-full px-3 text-sm font-semibold text-white disabled:opacity-50"
-              style={{ background: 'var(--teal)', boxShadow: '0 4px 12px rgba(29,122,106,0.35)' }}
-            >
-              Senden
-            </button>
-          </div>
+              <div className="rounded-xl border border-white/8 bg-white/4 p-3">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(168,240,224,0.4)]">Dr. Mia sagte</p>
+                <p className="text-sm italic text-white/55">„{coachTranscript || current.voice_script}"</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(168,240,224,0.6)]">Dr. Mia spricht</p>
+                <p className="min-h-12 text-[15px] leading-7 text-white/90 italic">
+                  {coachTranscript || current.voice_script}
+                </p>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <div
+                  className="flex min-h-[2.75rem] flex-1 items-center gap-2 rounded-full border px-3"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    borderColor: 'rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <input
+                    value={typedMessage}
+                    onChange={event => setTypedMessage(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void sendUserMessage(typedMessage)
+                      }
+                    }}
+                    placeholder="Sag etwas oder tippe hier…"
+                    className="voice-input h-10 flex-1 text-sm focus:outline-none"
+                    aria-label="Nachricht an Dr. Mia"
+                    style={{
+                      background: 'transparent',
+                      color: 'white',
+                      border: '0',
+                      boxShadow: 'none',
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      padding: 0,
+                    }}
+                  />
+                  <div className="flex items-center gap-[2px]">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="w-[2px] rounded-full"
+                        style={{
+                          height: `${[4, 10, 7, 12, 5][index]}px`,
+                          background: 'rgba(255,255,255,0.22)',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={startListening}
+                  disabled={!isMicAvailable || isResponding || isPaused}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-white disabled:opacity-50"
+                  style={{ background: 'var(--peach)', boxShadow: '0 4px 12px rgba(240,114,74,0.35)' }}
+                  aria-label="Mit Dr. Mia sprechen"
+                >
+                  🎙
+                </button>
+                <button
+                  onClick={() => void sendUserMessage(typedMessage)}
+                  disabled={isResponding || isPaused || !typedMessage.trim()}
+                  className="rounded-full border px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'rgba(29,122,106,0.35)', borderColor: 'rgba(255,255,255,0.08)' }}
+                >
+                  Senden
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="mt-auto rounded-t-[34px] bg-[var(--background)] px-6 pb-[calc(1.5rem+var(--safe-bottom))] pt-6">
-          {timeLeft !== null && (
-            <div className="mb-8 flex items-center justify-center">
-              <div className="relative flex items-center justify-center">
-                <svg width="220" height="220" style={{ transform: 'rotate(-90deg)' }}>
-                  <circle cx="110" cy="110" r={RADIUS} fill="none" stroke="var(--border)" strokeWidth="8" />
-                  <circle
-                    cx="110"
-                    cy="110"
-                    r={RADIUS}
-                    fill="none"
-                    stroke={phaseColor}
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={CIRCUMFERENCE}
-                    strokeDashoffset={CIRCUMFERENCE - (CIRCUMFERENCE * (progress ?? 0)) / 100}
-                    style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.6s ease' }}
-                  />
-                </svg>
-                <div key={`timer-${timeLeft}`} className="absolute flex flex-col items-center justify-center gap-2 text-center animate-count-tick">
-                  <div className="text-phase text-[var(--text-muted)]">Sekunden</div>
-                  <div className="text-timer leading-none" style={{ color: timeLeft <= 5 ? 'var(--peach)' : 'var(--text-primary)' }}>{timeLeft}</div>
-                </div>
+        <div className="mt-auto rounded-t-[28px] bg-[var(--background)] px-6 pb-[calc(1.25rem+var(--safe-bottom))] pt-5 shadow-[0_-8px_32px_rgba(0,0,0,0.3)]">
+          <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[var(--border)]" />
+
+          {isResponding && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-[rgba(240,114,74,0.15)] bg-[var(--peach-light)] p-3">
+              <span className="text-xl">🩺</span>
+              <div>
+                <div className="text-xs font-bold text-[var(--peach)]">Dr. Mia antwortet gleich…</div>
+                <div className="text-xs text-[var(--text-muted)]">Verarbeite deine Frage</div>
+              </div>
+              <div className="ml-auto flex gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-[var(--peach)] animate-bounce [animation-delay:0ms]" />
+                <div className="h-1.5 w-1.5 rounded-full bg-[var(--peach)] animate-bounce [animation-delay:120ms]" />
+                <div className="h-1.5 w-1.5 rounded-full bg-[var(--peach)] animate-bounce [animation-delay:220ms]" />
               </div>
             </div>
           )}
 
-          {timeLeft === null && current.repetitions && current.sets && (
-            <div className="mb-6 rounded-[24px] bg-[var(--sand)] px-6 py-8 text-center">
-              <div className="text-phase mb-2 text-[var(--text-muted)]">Wiederholungen</div>
-              <div className="text-reps text-[var(--teal)]">
-                {current.sets}
-                <span className="mx-2 text-[0.45em] text-[var(--text-muted)]">×</span>
-                {current.repetitions}
-              </div>
-              <div className="mt-2 text-sm text-[var(--text-secondary)]">Sätze × Wiederholungen</div>
-            </div>
-          )}
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--teal)]">
+            {isPaused ? 'Pausiert' : 'Jetzt'} · Übung {currentIndex + 1} von {exercises.length}
+          </p>
+          <h2 className="font-display text-[1.65rem] leading-tight text-[var(--text-primary)]">{current.name}</h2>
+          <p className="mb-4 mt-2 rounded-[12px] bg-[var(--sand)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)]">
+            {current.description}
+          </p>
 
-          <div className="mb-4 rounded-[20px] bg-[var(--lavender-light)] p-4">
-            <div className="text-sm font-semibold text-[var(--text-primary)]">Dr. Mia sagt</div>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-              {mode === 'listening'
-                ? 'Ich höre gerade zu. Sag mir, wenn etwas unklar ist oder du eine Pause brauchst.'
-                : 'Arbeite ruhig, weich und ohne Druck. Wenn etwas zieht statt schmerzt, bist du meist im guten Bereich.'}
-            </p>
+          <div className="mb-4 grid grid-cols-3 gap-2.5">
+            <div className="rounded-[12px] border p-3 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]" style={{ borderColor: timeLeft !== null ? 'var(--teal)' : 'var(--border)', background: timeLeft !== null ? 'rgba(29,122,106,0.04)' : 'var(--card)' }}>
+              <div className="text-[1.6rem] font-extrabold leading-none text-[var(--teal)] tabular-nums">{timeLeft ?? (current.duration_seconds ?? 0)}</div>
+              <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">Sekunden</div>
+            </div>
+            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+              <div className="text-[1.6rem] font-extrabold leading-none text-[var(--text-primary)]">
+                {current.sets && current.repetitions ? `${current.sets}×${current.repetitions}` : '1×8'}
+              </div>
+              <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">Wiederholungen</div>
+            </div>
+            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+              <div className="text-[1.6rem] font-extrabold leading-none text-[var(--text-primary)]">
+                {current.duration_seconds ? `${current.duration_seconds}s` : '45s'}
+              </div>
+              <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">Gesamt</div>
+            </div>
           </div>
 
-          <button
-            onClick={handleNext}
-            className="btn-primary w-full rounded-[18px] py-4 text-lg"
-          >
+          <div className="mb-4 flex items-center justify-center gap-4">
+            <div className="relative flex h-[88px] w-[88px] items-center justify-center">
+              <svg width="88" height="88" viewBox="0 0 88 88" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="44" cy="44" r="38" fill="none" stroke="var(--border)" strokeWidth="6" />
+                <circle
+                  cx="44"
+                  cy="44"
+                  r="38"
+                  fill="none"
+                  stroke={phaseColor}
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  strokeDasharray={238.8}
+                  strokeDashoffset={238.8 - (238.8 * ringPercent) / 100}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-lg font-extrabold text-[var(--teal)]">{ringPercent}%</span>
+                <span className="text-[11px] text-[var(--text-muted)]">erledigt</span>
+              </div>
+            </div>
+            <div className="flex-1 rounded-[12px] bg-[var(--sand)] px-4 py-3">
+              <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">Als nächstes</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">{nextLabel}</div>
+            </div>
+          </div>
+
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            <button
+              onClick={() => void handleRepeat()}
+              disabled={isResponding}
+              className="rounded-[12px] border border-[var(--border)] bg-[var(--sand)] px-3 py-3 text-sm font-semibold text-[var(--text-secondary)] disabled:opacity-50"
+            >
+              Nochmal
+            </button>
+            <button
+              onClick={handlePauseToggle}
+              disabled={isResponding}
+              className="rounded-[12px] border px-3 py-3 text-sm font-semibold disabled:opacity-50"
+              style={{
+                borderColor: isPaused ? 'var(--teal)' : 'var(--border)',
+                color: isPaused ? 'var(--teal)' : 'var(--text-secondary)',
+                background: isPaused ? 'rgba(29,122,106,0.05)' : 'var(--sand)',
+              }}
+            >
+              {isPaused ? 'Fortsetzen' : 'Pause'}
+            </button>
+            <button
+              onClick={handleStop}
+              className="rounded-[12px] border border-[rgba(240,114,74,0.2)] bg-[rgba(240,114,74,0.05)] px-3 py-3 text-sm font-semibold text-[var(--peach)]"
+            >
+              Stop
+            </button>
+          </div>
+
+          <button onClick={handleNext} className="btn-primary w-full rounded-[14px] py-3.5 text-lg">
             {isLast ? 'Session abschließen' : 'Weiter'}
           </button>
         </div>

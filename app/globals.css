@@ -183,6 +183,20 @@
     border-color: var(--primary) !important;
     box-shadow: 0 0 0 2px rgba(29, 122, 106, 0.15) !important;
   }
+  .voice-input {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: white !important;
+  }
+  .voice-input::placeholder {
+    color: rgba(255,255,255,0.35) !important;
+  }
+  .voice-input:focus {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
   ::-webkit-scrollbar {
     width: 4px;
   }
@@ -208,6 +222,21 @@
 @keyframes waveOut {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
   100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+}
+
+@keyframes voiceWaveOut {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes waveOutCentered {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.75; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}
+
+@keyframes ringPulseCentered {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.28; }
+  50% { transform: translate(-50%, -50%) scale(1.04); opacity: 0.55; }
 }
 
 @keyframes pulse-glow {
