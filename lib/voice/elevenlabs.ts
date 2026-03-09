@@ -7,6 +7,15 @@ export class ElevenLabsProvider implements VoiceProvider {
   async speak(text: string): Promise<void> {
     this.stop()
 
+    if (text.length <= 1200) {
+      try {
+        await this.playStream(text)
+        return
+      } catch (err) {
+        console.warn('ElevenLabs streaming playback failed, falling back to buffered mode:', err)
+      }
+    }
+
     const response = await fetch('/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -29,6 +38,7 @@ export class ElevenLabsProvider implements VoiceProvider {
 
       return new Promise((resolve) => {
         let resolved = false
+        let emittedStart = false
         const done = () => {
           if (resolved) return
           resolved = true
@@ -42,6 +52,11 @@ export class ElevenLabsProvider implements VoiceProvider {
 
         audio.onended = done
         audio.onerror = done
+        audio.onplaying = () => {
+          if (emittedStart) return
+          emittedStart = true
+          emitVoiceAudioStarted()
+        }
 
         void audio.play().catch(async (err) => {
           console.warn('ElevenLabs HTMLAudio play failed, falling back to browser TTS:', err)
@@ -57,15 +72,55 @@ export class ElevenLabsProvider implements VoiceProvider {
     }
   }
 
+  private playStream(text: string): Promise<void> {
+    const streamUrl = `/api/voice/stream?text=${encodeURIComponent(text)}&ts=${Date.now()}`
+    const audio = new Audio(streamUrl)
+    this.currentAudio = audio
+    audio.preload = 'auto'
+
+    return new Promise((resolve, reject) => {
+      let resolved = false
+      let emittedStart = false
+      const done = () => {
+        if (resolved) return
+        resolved = true
+        this.currentAudio = null
+        resolve()
+      }
+      const fail = (err?: unknown) => {
+        if (resolved) return
+        resolved = true
+        this.currentAudio = null
+        reject(err)
+      }
+
+      audio.onplaying = () => {
+        if (emittedStart) return
+        emittedStart = true
+        emitVoiceAudioStarted()
+      }
+      audio.onended = done
+      audio.onerror = () => fail(new Error('stream play failed'))
+      void audio.play().catch(fail)
+    })
+  }
+
   stop(): void {
     if (this.currentAudio) {
       this.currentAudio.pause()
       this.currentAudio.currentTime = 0
+      this.currentAudio.src = ''
       this.currentAudio = null
     }
     if (this.currentObjectUrl) {
       URL.revokeObjectURL(this.currentObjectUrl)
       this.currentObjectUrl = null
     }
+  }
+}
+
+function emitVoiceAudioStarted() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('voice-audio-start'))
   }
 }

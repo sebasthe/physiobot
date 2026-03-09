@@ -4,6 +4,16 @@ import { buildDrMiaSystemPrompt } from '@/lib/claude/prompts'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionContext, type TranscriptMessage } from '@/lib/mem0'
 
+function getPhaseHint(phase: string | undefined) {
+  if (phase === 'warmup') {
+    return 'Phase-Hinweis: ruhiger Einstieg, Sicherheit, Atmung, keine Überforderung.'
+  }
+  if (phase === 'cooldown') {
+    return 'Phase-Hinweis: Tempo reduzieren, Entspannung, positives Abschlussgefühl.'
+  }
+  return 'Phase-Hinweis: klare Technik-Cues, kurze motivierende Korrekturen, kontrollierte Intensität.'
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -50,11 +60,14 @@ export async function POST(request: Request) {
   })
 
   const contextMessage = body.currentExercise?.name
-    ? `Aktuelle Übung: ${body.currentExercise.name}. Beschreibung: ${body.currentExercise.description ?? 'keine zusätzliche Beschreibung'}. Phase: ${body.currentExercise.phase ?? 'main'}.`
+    ? `Aktuelle Übung: ${body.currentExercise.name}. Beschreibung: ${body.currentExercise.description ?? 'keine zusätzliche Beschreibung'}. Phase: ${body.currentExercise.phase ?? 'main'}. ${getPhaseHint(body.currentExercise.phase)}`
     : 'Aktuell läuft eine Physio-Session.'
+
+  const responseStyleMessage = 'Antwortstil: maximal 2-3 kurze Sätze, konkrete nächste Aktion, empathisch aber ohne Schreiwörter oder übertriebene Rhetorik.'
 
   const messages = [
     { role: 'user' as const, content: contextMessage },
+    { role: 'user' as const, content: responseStyleMessage },
     ...(body.messages ?? []).map(message => ({
       role: message.role,
       content: message.content,

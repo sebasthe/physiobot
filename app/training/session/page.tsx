@@ -103,6 +103,7 @@ export default function TrainingSessionPage() {
       onComplete={handleSessionComplete}
       speak={(text) => voice.speak(text)}
       stopSpeaking={() => voice.stop()}
+      sessionId={sessionId}
     />
   )
 }

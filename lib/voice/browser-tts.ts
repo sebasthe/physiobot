@@ -8,6 +8,9 @@ export class BrowserTTSProvider implements VoiceProvider {
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.lang = 'de-DE'
       utterance.rate = 1.0
+      utterance.onstart = () => {
+        window.dispatchEvent(new CustomEvent('voice-audio-start'))
+      }
       utterance.onend = () => resolve()
       utterance.onerror = (e) => { console.warn('BrowserTTS error:', e.error); resolve() }
       window.speechSynthesis.speak(utterance)

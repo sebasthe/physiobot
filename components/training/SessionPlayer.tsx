@@ -9,6 +9,7 @@ interface Props {
   onComplete: (payload: { transcript: TranscriptMessage[]; completedExercises: Exercise[] }) => void
   speak: (text: string) => Promise<void>
   stopSpeaking?: () => void
+  sessionId?: string
 }
 
 type SessionMode = 'pre' | 'coach' | 'listening'
@@ -54,7 +55,16 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 type AgentStatus = 'bereit' | 'hoert_zu' | 'versteht' | 'antwortet'
 
-export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaking }: Props) {
+type VoiceTelemetryEvent =
+  | 'listen_started'
+  | 'transcript_committed'
+  | 'agent_reply_received'
+  | 'audio_started'
+  | 'interrupt'
+  | 'fallback_mode'
+  | 'voice_error'
+
+export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaking, sessionId }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const isTestEnv = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)
@@ -75,6 +85,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const listeningIdleTimerRef = useRef<number | null>(null)
   const userTranscriptRef = useRef('')
   const skipAutoSpeakRef = useRef(false)
+  const activeTurnStartedAtRef = useRef<number | null>(null)
 
   if (exercises.length === 0) {
     return (
@@ -113,6 +124,18 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const nextLabel = nextExercise
     ? `${nextExercise.name} · ${nextExercise.duration_seconds ? `${nextExercise.duration_seconds}s` : `${nextExercise.sets ?? 1}×${nextExercise.repetitions ?? 8}`}`
     : 'Session abschließen'
+
+  const trackVoiceEvent = (eventType: VoiceTelemetryEvent, payload: Record<string, unknown> = {}) => {
+    void fetch('/api/voice/telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType,
+        sessionId,
+        payload,
+      }),
+    }).catch(() => undefined)
+  }
 
   const clearListeningIdleTimer = () => {
     if (listeningIdleTimerRef.current) {
@@ -158,6 +181,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
 
   const interruptAgent = () => {
     stopSpeaking?.()
+    trackVoiceEvent('interrupt', { mode })
     setAgentStatus('hoert_zu')
   }
 
@@ -169,9 +193,12 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     setUserTranscript('')
     interruptAgent()
     stopAllListening()
+    activeTurnStartedAtRef.current = Date.now()
+    trackVoiceEvent('listen_started', { sttMode: 'realtime', exerciseIndex: currentIndex })
 
     const tokenResponse = await fetch('/api/voice/tokens', { method: 'POST' })
     if (!tokenResponse.ok) {
+      trackVoiceEvent('voice_error', { stage: 'token_fetch_failed' })
       throw new Error('Realtime token konnte nicht geladen werden')
     }
     const tokens = await tokenResponse.json() as { sttToken?: string }
@@ -194,6 +221,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
         clearListeningIdleTimer()
         stopRealtimeListening()
         if (text.trim()) {
+          trackVoiceEvent('transcript_committed', { chars: text.trim().length, sttMode: 'realtime' })
           setMode('coach')
           setAgentStatus('versteht')
           void sendUserMessage(text.trim())
@@ -203,6 +231,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
         }
       },
       onError: message => {
+        trackVoiceEvent('voice_error', { stage: 'realtime_stt', message })
         setVoiceHint(message)
         setMode('coach')
         setAgentStatus('bereit')
@@ -234,9 +263,11 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       } catch {
         if (!cancelled && Recognition) {
           setSttMode('browser')
+          trackVoiceEvent('fallback_mode', { sttMode: 'browser' })
         } else if (!cancelled) {
           setSttMode('none')
           setVoiceHint('Sprachaufnahme ist hier eingeschränkt. Du kannst jederzeit tippen.')
+          trackVoiceEvent('fallback_mode', { sttMode: 'none' })
         }
       }
     }
@@ -248,6 +279,26 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       stopAllListening()
     }
   }, [])
+
+  useEffect(() => {
+    const onAudioStart = () => {
+      const startedAt = activeTurnStartedAtRef.current
+      const latencyMs = startedAt ? Math.max(0, Date.now() - startedAt) : null
+      trackVoiceEvent('audio_started', {
+        latencyMs,
+        sttMode,
+      })
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('voice-audio-start', onAudioStart)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('voice-audio-start', onAudioStart)
+      }
+    }
+  }, [sttMode])
 
   useEffect(() => {
     if (!hasStarted) return
@@ -338,6 +389,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       void startRealtimeListening().catch(() => {
         setSttMode('browser')
         setVoiceHint('Realtime-Voice nicht verfügbar. Wechsle auf Browser-Spracherkennung.')
+        trackVoiceEvent('fallback_mode', { sttMode: 'browser', reason: 'realtime_failed' })
       })
       return
     }
@@ -347,11 +399,14 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       : undefined
     if (!Recognition) {
       setVoiceHint('Sprachaufnahme ist auf diesem Gerät nicht verfügbar. Bitte nutze das Texteingabefeld.')
+      trackVoiceEvent('fallback_mode', { sttMode: 'none', reason: 'recognition_unavailable' })
       return
     }
 
     recognitionRef.current?.stop()
     interruptAgent()
+    activeTurnStartedAtRef.current = Date.now()
+    trackVoiceEvent('listen_started', { sttMode: 'browser', exerciseIndex: currentIndex })
     const recognition = new Recognition()
     recognition.lang = 'de-DE'
     recognition.interimResults = true
@@ -372,11 +427,13 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       setMode('coach')
       setAgentStatus('bereit')
       clearListeningIdleTimer()
+      trackVoiceEvent('voice_error', { stage: 'browser_stt' })
     }
 
     recognition.onend = () => {
       clearListeningIdleTimer()
       if (userTranscriptRef.current.trim()) {
+        trackVoiceEvent('transcript_committed', { chars: userTranscriptRef.current.trim().length, sttMode: 'browser' })
         setAgentStatus('versteht')
         void sendUserMessage(userTranscriptRef.current.trim())
       } else {
@@ -406,6 +463,9 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     const trimmedMessage = message.trim()
     if (!trimmedMessage) return
 
+    if (!activeTurnStartedAtRef.current) {
+      activeTurnStartedAtRef.current = Date.now()
+    }
     stopAllListening()
     interruptAgent()
     setIsResponding(true)
@@ -429,11 +489,16 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       const reply = typeof data.reply === 'string' && data.reply.trim()
         ? data.reply.trim()
         : 'Okay, wir machen es einfacher. Langsam und ohne Druck.'
+      trackVoiceEvent('agent_reply_received', {
+        llmLatencyMs: Math.max(0, Date.now() - (activeTurnStartedAtRef.current ?? Date.now())),
+        chars: reply.length,
+      })
       setCoachTranscript(reply)
       setTranscript(prev => [...prev, { role: 'assistant', content: reply }])
       setMode('coach')
       await speakWithStatus(reply)
     } catch {
+      trackVoiceEvent('voice_error', { stage: 'assistant_reply' })
       const fallback = 'Ich bin da. Lass uns die Bewegung langsam und ruhig zusammen machen.'
       setCoachTranscript(fallback)
       setTranscript(prev => [...prev, { role: 'assistant', content: fallback }])
@@ -441,6 +506,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       await speakWithStatus(fallback)
     } finally {
       setIsResponding(false)
+      activeTurnStartedAtRef.current = null
       if (mode !== 'listening') {
         setAgentStatus('bereit')
       }

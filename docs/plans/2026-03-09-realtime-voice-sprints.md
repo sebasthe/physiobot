@@ -26,10 +26,10 @@ Datum: 2026-03-09
 - `lib/voice/elevenlabs.ts` (vorheriger Fallback-Fix bleibt aktiv)
 
 ## Sprint 2 (Feinschliff - offen)
-- [ ] ElevenLabs Streaming-TTS-End-to-End (Chunked Playback statt kompletter Audio-Blob).
+- [x] ElevenLabs Streaming-TTS-End-to-End (progressives HTTP-Streaming für frühere Wiedergabe).
 - [ ] Serverseitige Session-Orchestrierung über dedizierten WebSocket-Service.
-- [ ] Telemetrie: Turn-Latenz, STT-Fehlerraten, Interrupt-Rate, Fallback-Rate.
-- [ ] Adaptive Prompting je Übungsphase + Persona.
+- [x] Telemetrie-Basis: Turn-Latenz, STT-Fehlerraten, Interrupt- und Fallback-Events.
+- [x] Adaptive Prompting je Übungsphase (Warmup/Main/Cooldown Response-Hints).
 - [ ] Verbesserte Noise-/Echo-Strategien für iPhone Lautsprecherbetrieb.
 - [ ] Robustere Transcript-Korrektur inkl. „vor Senden editieren“ für Realtime-Commits.
 
