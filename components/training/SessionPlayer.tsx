@@ -85,9 +85,10 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const listeningIdleTimerRef = useRef<number | null>(null)
   const pendingTurnControllerRef = useRef<AbortController | null>(null)
   const speechQueueRef = useRef<string[]>([])
-  const speechQueueBusyRef = useRef(false)
+  const speechQueueTaskRef = useRef<Promise<void> | null>(null)
   const autoSendTimerRef = useRef<number | null>(null)
   const pendingTranscriptRef = useRef<string | null>(null)
+  const voiceLoopActiveRef = useRef(false)
   const userTranscriptRef = useRef('')
   const skipAutoSpeakRef = useRef(false)
   const activeTurnStartedAtRef = useRef<number | null>(null)
@@ -151,21 +152,21 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
 
   const clearSpeechQueue = () => {
     speechQueueRef.current = []
-    speechQueueBusyRef.current = false
+    speechQueueTaskRef.current = null
   }
 
-  const processSpeechQueue = async () => {
-    if (speechQueueBusyRef.current) return
-    speechQueueBusyRef.current = true
-    try {
+  const processSpeechQueue = () => {
+    if (speechQueueTaskRef.current) return speechQueueTaskRef.current
+    speechQueueTaskRef.current = (async () => {
       while (speechQueueRef.current.length > 0) {
         const part = speechQueueRef.current.shift()
         if (!part) continue
         await speakWithStatus(part)
       }
-    } finally {
-      speechQueueBusyRef.current = false
-    }
+    })().finally(() => {
+      speechQueueTaskRef.current = null
+    })
+    return speechQueueTaskRef.current
   }
 
   const enqueueSpeechChunk = (chunk: string) => {
@@ -218,7 +219,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }
 
   const interruptAgent = (reason: 'user' | 'turn_start' = 'user') => {
-    const wasSpeakingOrPending = Boolean(pendingTurnControllerRef.current) || speechQueueBusyRef.current
+    const wasSpeakingOrPending = Boolean(pendingTurnControllerRef.current) || Boolean(speechQueueTaskRef.current)
     pendingTurnControllerRef.current?.abort()
     pendingTurnControllerRef.current = null
     clearAutoSendTimer()
@@ -400,12 +401,16 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const handlePauseToggle = () => {
     setIsPaused(prev => {
       const next = !prev
-      if (next) stopAllListening()
+      if (next) {
+        voiceLoopActiveRef.current = false
+        stopAllListening()
+      }
       return next
     })
   }
 
   const handleStop = () => {
+    voiceLoopActiveRef.current = false
     pendingTurnControllerRef.current?.abort()
     pendingTurnControllerRef.current = null
     clearAutoSendTimer()
@@ -434,11 +439,13 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
 
   const startListening = () => {
     if (realtimeOrchestratorRef.current?.isActive || mode === 'listening') {
+      voiceLoopActiveRef.current = false
       stopAllListening()
       setMode('coach')
       setAgentStatus('bereit')
       return
     }
+    voiceLoopActiveRef.current = true
 
     if (sttMode === 'realtime') {
       void startRealtimeListening().catch(() => {
@@ -551,6 +558,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     clearAutoSendTimer()
     const messages = [...transcript, { role: 'user' as const, content: trimmedMessage }]
     setTranscript(messages)
+    let turnAborted = false
     try {
       const controller = new AbortController()
       pendingTurnControllerRef.current?.abort()
@@ -648,6 +656,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       if (!gotDone) {
         flushSpeechBuffer(true)
       }
+      await processSpeechQueue()
       trackVoiceEvent('agent_reply_received', {
         llmLatencyMs: llmLatencyMsFromServer ?? Math.max(0, Date.now() - (activeTurnStartedAtRef.current ?? Date.now())),
         totalLatencyMs: totalLatencyMsFromServer,
@@ -658,6 +667,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       setMode('coach')
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
+        turnAborted = true
         setIsResponding(false)
         return
       }
@@ -673,6 +683,12 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       activeTurnStartedAtRef.current = null
       if (mode !== 'listening') {
         setAgentStatus('bereit')
+      }
+      if (!turnAborted && voiceLoopActiveRef.current && !isPaused && hasStarted && sttMode !== 'none') {
+        window.setTimeout(() => {
+          if (!voiceLoopActiveRef.current || isPaused || mode === 'listening') return
+          startListening()
+        }, 180)
       }
     }
   }
