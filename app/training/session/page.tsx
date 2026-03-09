@@ -102,6 +102,7 @@ export default function TrainingSessionPage() {
       exercises={exercises}
       onComplete={handleSessionComplete}
       speak={(text) => voice.speak(text)}
+      stopSpeaking={() => voice.stop()}
     />
   )
 }

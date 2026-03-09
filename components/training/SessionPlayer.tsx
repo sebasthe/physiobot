@@ -2,11 +2,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TranscriptMessage } from '@/lib/mem0'
 import type { Exercise } from '@/lib/types'
+import { ElevenLabsRealtimeOrchestrator } from '@/lib/voice/realtime-orchestrator'
 
 interface Props {
   exercises: Exercise[]
   onComplete: (payload: { transcript: TranscriptMessage[]; completedExercises: Exercise[] }) => void
   speak: (text: string) => Promise<void>
+  stopSpeaking?: () => void
 }
 
 type SessionMode = 'pre' | 'coach' | 'listening'
@@ -50,7 +52,9 @@ const PHASE_LABELS: Record<string, string> = {
 const RADIUS = 80
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
-export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
+type AgentStatus = 'bereit' | 'hoert_zu' | 'versteht' | 'antwortet'
+
+export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaking }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const isTestEnv = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)
@@ -63,8 +67,14 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
   const [isMicAvailable, setIsMicAvailable] = useState(false)
   const [isResponding, setIsResponding] = useState(false)
   const [typedMessage, setTypedMessage] = useState('')
+  const [voiceHint, setVoiceHint] = useState<string>()
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>('bereit')
+  const [sttMode, setSttMode] = useState<'realtime' | 'browser' | 'none'>('none')
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const realtimeOrchestratorRef = useRef<ElevenLabsRealtimeOrchestrator | null>(null)
+  const listeningIdleTimerRef = useRef<number | null>(null)
   const userTranscriptRef = useRef('')
+  const skipAutoSpeakRef = useRef(false)
 
   if (exercises.length === 0) {
     return (
@@ -104,25 +114,158 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     ? `${nextExercise.name} · ${nextExercise.duration_seconds ? `${nextExercise.duration_seconds}s` : `${nextExercise.sets ?? 1}×${nextExercise.repetitions ?? 8}`}`
     : 'Session abschließen'
 
+  const clearListeningIdleTimer = () => {
+    if (listeningIdleTimerRef.current) {
+      window.clearTimeout(listeningIdleTimerRef.current)
+      listeningIdleTimerRef.current = null
+    }
+  }
+
+  const scheduleBackchannel = () => {
+    clearListeningIdleTimer()
+    listeningIdleTimerRef.current = window.setTimeout(() => {
+      if (mode !== 'listening' || userTranscriptRef.current.trim()) return
+      const backchannel = 'Ja, ich höre dich. Sprich einfach weiter.'
+      setCoachTranscript(backchannel)
+      setTranscript(prev => {
+        const last = prev[prev.length - 1]
+        if (last?.role === 'assistant' && last.content === backchannel) return prev
+        return [...prev, { role: 'assistant', content: backchannel }]
+      })
+    }, 4500)
+  }
+
+  const stopRealtimeListening = () => {
+    realtimeOrchestratorRef.current?.stop()
+    realtimeOrchestratorRef.current = null
+    clearListeningIdleTimer()
+  }
+
+  const stopAllListening = () => {
+    recognitionRef.current?.stop()
+    stopRealtimeListening()
+    clearListeningIdleTimer()
+  }
+
+  const speakWithStatus = async (text: string) => {
+    setAgentStatus('antwortet')
+    try {
+      await speak(text)
+    } finally {
+      setAgentStatus('bereit')
+    }
+  }
+
+  const interruptAgent = () => {
+    stopSpeaking?.()
+    setAgentStatus('hoert_zu')
+  }
+
+  const startRealtimeListening = async () => {
+    setAgentStatus('hoert_zu')
+    setMode('listening')
+    setVoiceHint(undefined)
+    userTranscriptRef.current = ''
+    setUserTranscript('')
+    interruptAgent()
+    stopAllListening()
+
+    const tokenResponse = await fetch('/api/voice/tokens', { method: 'POST' })
+    if (!tokenResponse.ok) {
+      throw new Error('Realtime token konnte nicht geladen werden')
+    }
+    const tokens = await tokenResponse.json() as { sttToken?: string }
+    if (!tokens.sttToken) {
+      throw new Error('Realtime token fehlt')
+    }
+
+    const orchestrator = new ElevenLabsRealtimeOrchestrator()
+    realtimeOrchestratorRef.current = orchestrator
+    await orchestrator.start({
+      token: tokens.sttToken,
+      languageCode: 'de',
+      onPartialTranscript: text => {
+        clearListeningIdleTimer()
+        userTranscriptRef.current = text
+        setUserTranscript(text || 'Ich höre zu…')
+        scheduleBackchannel()
+      },
+      onCommittedTranscript: text => {
+        clearListeningIdleTimer()
+        stopRealtimeListening()
+        if (text.trim()) {
+          setMode('coach')
+          setAgentStatus('versteht')
+          void sendUserMessage(text.trim())
+        } else {
+          setMode('coach')
+          setAgentStatus('bereit')
+        }
+      },
+      onError: message => {
+        setVoiceHint(message)
+        setMode('coach')
+        setAgentStatus('bereit')
+        stopRealtimeListening()
+      },
+    })
+    scheduleBackchannel()
+  }
+
   useEffect(() => {
+    if (isTestEnv) {
+      setIsMicAvailable(true)
+      setSttMode('browser')
+      return
+    }
     const Recognition = typeof window !== 'undefined'
       ? window.SpeechRecognition ?? window.webkitSpeechRecognition
       : undefined
-    setIsMicAvailable(Boolean(Recognition))
+    setIsMicAvailable(Boolean(Recognition) || typeof WebSocket !== 'undefined')
+
+    let cancelled = false
+    if (typeof window === 'undefined') return
+
+    const detectSttMode = async () => {
+      try {
+        const response = await fetch('/api/voice/tokens', { method: 'POST' })
+        if (!response.ok) throw new Error('No realtime token')
+        if (!cancelled) setSttMode('realtime')
+      } catch {
+        if (!cancelled && Recognition) {
+          setSttMode('browser')
+        } else if (!cancelled) {
+          setSttMode('none')
+          setVoiceHint('Sprachaufnahme ist hier eingeschränkt. Du kannst jederzeit tippen.')
+        }
+      }
+    }
+
+    void detectSttMode()
+
+    return () => {
+      cancelled = true
+      stopAllListening()
+    }
   }, [])
 
   useEffect(() => {
     if (!hasStarted) return
+    if (skipAutoSpeakRef.current) {
+      skipAutoSpeakRef.current = false
+      return
+    }
 
     setMode('coach')
     setIsPaused(false)
+    setVoiceHint(undefined)
     setCoachTranscript(current.voice_script)
     setTranscript(prev => {
       const last = prev[prev.length - 1]
       if (last?.role === 'assistant' && last.content === current.voice_script) return prev
       return [...prev, { role: 'assistant', content: current.voice_script }]
     })
-    speak(current.voice_script)
+    void speakWithStatus(current.voice_script)
     if (current.duration_seconds) {
       setTimeLeft(current.duration_seconds)
     } else {
@@ -130,7 +273,7 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     }
   // speak is intentionally omitted: we only re-run on index change, not when speak prop ref changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, current, hasStarted])
+  }, [currentIndex, hasStarted, current])
 
   useEffect(() => {
     if (!hasStarted || isPaused || timeLeft === null || timeLeft <= 0) return
@@ -150,33 +293,65 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     if (!hasStarted) return
     setMode('coach')
     setCoachTranscript(current.voice_script)
-    await speak(current.voice_script)
+    await speakWithStatus(current.voice_script)
   }
 
   const handlePauseToggle = () => {
     setIsPaused(prev => {
       const next = !prev
-      if (next) recognitionRef.current?.stop()
+      if (next) stopAllListening()
       return next
     })
   }
 
   const handleStop = () => {
+    stopAllListening()
+    stopSpeaking?.()
     onComplete({ transcript, completedExercises: exercises.slice(0, Math.max(1, currentIndex)) })
   }
 
   const startSession = () => {
+    skipAutoSpeakRef.current = true
     setHasStarted(true)
     setMode('coach')
+    setIsPaused(false)
+    setVoiceHint(undefined)
+    setCoachTranscript(current.voice_script)
+    setTranscript(prev => [...prev, { role: 'assistant', content: current.voice_script }])
+    if (current.duration_seconds) {
+      setTimeLeft(current.duration_seconds)
+    } else {
+      setTimeLeft(null)
+    }
+    void speakWithStatus(current.voice_script)
   }
 
   const startListening = () => {
+    if (realtimeOrchestratorRef.current?.isActive || mode === 'listening') {
+      stopAllListening()
+      setMode('coach')
+      setAgentStatus('bereit')
+      return
+    }
+
+    if (sttMode === 'realtime') {
+      void startRealtimeListening().catch(() => {
+        setSttMode('browser')
+        setVoiceHint('Realtime-Voice nicht verfügbar. Wechsle auf Browser-Spracherkennung.')
+      })
+      return
+    }
+
     const Recognition = typeof window !== 'undefined'
       ? window.SpeechRecognition ?? window.webkitSpeechRecognition
       : undefined
-    if (!Recognition) return
+    if (!Recognition) {
+      setVoiceHint('Sprachaufnahme ist auf diesem Gerät nicht verfügbar. Bitte nutze das Texteingabefeld.')
+      return
+    }
 
     recognitionRef.current?.stop()
+    interruptAgent()
     const recognition = new Recognition()
     recognition.lang = 'de-DE'
     recognition.interimResults = true
@@ -189,17 +364,24 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
         .trim()
       userTranscriptRef.current = text
       setUserTranscript(text)
+      scheduleBackchannel()
     }
 
     recognition.onerror = () => {
+      setVoiceHint('Spracherkennung konnte nicht gestartet werden. Bitte Mikrofonzugriff in Safari erlauben oder tippen.')
       setMode('coach')
+      setAgentStatus('bereit')
+      clearListeningIdleTimer()
     }
 
     recognition.onend = () => {
+      clearListeningIdleTimer()
       if (userTranscriptRef.current.trim()) {
+        setAgentStatus('versteht')
         void sendUserMessage(userTranscriptRef.current.trim())
       } else {
         setMode('coach')
+        setAgentStatus('bereit')
       }
     }
 
@@ -207,15 +389,29 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
     userTranscriptRef.current = ''
     setUserTranscript('')
     setMode('listening')
-    recognition.start()
+    setAgentStatus('hoert_zu')
+    setVoiceHint(undefined)
+    scheduleBackchannel()
+    try {
+      recognition.start()
+    } catch {
+      setVoiceHint('Spracherkennung konnte nicht gestartet werden. Bitte tippe deine Nachricht.')
+      setMode('coach')
+      setAgentStatus('bereit')
+      clearListeningIdleTimer()
+    }
   }
 
   const sendUserMessage = async (message: string) => {
     const trimmedMessage = message.trim()
     if (!trimmedMessage) return
 
+    stopAllListening()
+    interruptAgent()
     setIsResponding(true)
+    setAgentStatus('versteht')
     setIsPaused(false)
+    setVoiceHint(undefined)
     setUserTranscript(trimmedMessage)
     setTypedMessage('')
     const messages = [...transcript, { role: 'user' as const, content: trimmedMessage }]
@@ -236,15 +432,18 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
       setCoachTranscript(reply)
       setTranscript(prev => [...prev, { role: 'assistant', content: reply }])
       setMode('coach')
-      await speak(reply)
+      await speakWithStatus(reply)
     } catch {
       const fallback = 'Ich bin da. Lass uns die Bewegung langsam und ruhig zusammen machen.'
       setCoachTranscript(fallback)
       setTranscript(prev => [...prev, { role: 'assistant', content: fallback }])
       setMode('coach')
-      await speak(fallback)
+      await speakWithStatus(fallback)
     } finally {
       setIsResponding(false)
+      if (mode !== 'listening') {
+        setAgentStatus('bereit')
+      }
     }
   }
 
@@ -337,6 +536,15 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
             <div className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-sm font-bold tabular-nums">
               {String(Math.floor(sessionSecondsLeft / 60)).padStart(2, '0')}:{String(sessionSecondsLeft % 60).padStart(2, '0')}
             </div>
+          </div>
+          <div className="mb-4 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-white/60">Live-Status</span>
+            <span className="rounded-full border border-white/15 bg-white/8 px-3 py-1 text-xs font-semibold text-white/85">
+              {agentStatus === 'hoert_zu' && 'Hört zu'}
+              {agentStatus === 'versteht' && 'Versteht…'}
+              {agentStatus === 'antwortet' && 'Antwortet…'}
+              {agentStatus === 'bereit' && 'Bereit'}
+            </span>
           </div>
 
           <div className="relative mb-4 flex justify-center">
@@ -468,10 +676,14 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
                 </div>
                 <button
                   onClick={startListening}
-                  disabled={!isMicAvailable || isResponding || isPaused}
+                  disabled={isResponding || isPaused}
                   className="flex h-10 w-10 items-center justify-center rounded-full text-white disabled:opacity-50"
-                  style={{ background: 'var(--peach)', boxShadow: '0 4px 12px rgba(240,114,74,0.35)' }}
+                  style={{
+                    background: isMicAvailable ? 'var(--peach)' : 'rgba(255,255,255,0.18)',
+                    boxShadow: isMicAvailable ? '0 4px 12px rgba(240,114,74,0.35)' : 'none',
+                  }}
                   aria-label="Mit Dr. Mia sprechen"
+                  title={sttMode === 'realtime' ? 'Realtime Voice aktiv' : 'Browser-Spracherkennung'}
                 >
                   🎙
                 </button>
@@ -483,6 +695,34 @@ export default function SessionPlayer({ exercises, onComplete, speak }: Props) {
                 >
                   Senden
                 </button>
+              </div>
+              {voiceHint && (
+                <p className="mt-2 px-2 text-xs text-white/55">{voiceHint}</p>
+              )}
+              <p className="mt-1 px-2 text-[10px] uppercase tracking-[0.08em] text-white/40">
+                Voice-Modus: {sttMode === 'realtime' ? 'Realtime' : sttMode === 'browser' ? 'Browser' : 'Text'}
+              </p>
+              <div className="mt-2 rounded-xl border border-white/8 bg-white/4 p-3">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(168,240,224,0.5)]">Live-Transkript</p>
+                <div className="max-h-28 space-y-1.5 overflow-y-auto pr-1">
+                  {transcript.slice(-4).map((message, index) => (
+                    <div key={`${message.role}-${index}-${message.content.slice(0, 12)}`} className="text-xs leading-5 text-white/80">
+                      <span className="font-semibold text-white/60">{message.role === 'assistant' ? 'Dr. Mia:' : 'Du:'}</span>{' '}
+                      {message.content}
+                      {message.role === 'user' && (
+                        <button
+                          onClick={() => setTypedMessage(message.content)}
+                          className="ml-2 text-[10px] font-semibold text-[var(--teal-light)]"
+                        >
+                          bearbeiten
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {transcript.length === 0 && (
+                    <div className="text-xs text-white/45">Noch kein Gespräch. Starte mit Sprache oder Text.</div>
+                  )}
+                </div>
               </div>
             </>
           )}

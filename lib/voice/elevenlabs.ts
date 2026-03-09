@@ -1,16 +1,11 @@
 import type { VoiceProvider } from './types'
 
 export class ElevenLabsProvider implements VoiceProvider {
-  private audioContext: AudioContext | null = null
-  private currentSource: AudioBufferSourceNode | null = null
+  private currentAudio: HTMLAudioElement | null = null
+  private currentObjectUrl: string | null = null
 
   async speak(text: string): Promise<void> {
-    // Close any previous context before creating a new one
-    if (this.audioContext) {
-      this.audioContext.close()
-      this.audioContext = null
-      this.currentSource = null
-    }
+    this.stop()
 
     const response = await fetch('/api/voice', {
       method: 'POST',
@@ -25,18 +20,35 @@ export class ElevenLabsProvider implements VoiceProvider {
 
     try {
       const audioBuffer = await response.arrayBuffer()
-      this.audioContext = new AudioContext()
-      const decoded = await this.audioContext.decodeAudioData(audioBuffer)
-      this.currentSource = this.audioContext.createBufferSource()
-      this.currentSource.buffer = decoded
-      this.currentSource.connect(this.audioContext.destination)
+      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+      const objectUrl = URL.createObjectURL(blob)
+      const audio = new Audio(objectUrl)
+      this.currentAudio = audio
+      this.currentObjectUrl = objectUrl
+      audio.preload = 'auto'
 
       return new Promise((resolve) => {
-        this.currentSource!.onended = () => {
-          this.currentSource = null
+        let resolved = false
+        const done = () => {
+          if (resolved) return
+          resolved = true
+          if (this.currentObjectUrl) {
+            URL.revokeObjectURL(this.currentObjectUrl)
+            this.currentObjectUrl = null
+          }
+          this.currentAudio = null
           resolve()
         }
-        this.currentSource!.start()
+
+        audio.onended = done
+        audio.onerror = done
+
+        void audio.play().catch(async (err) => {
+          console.warn('ElevenLabs HTMLAudio play failed, falling back to browser TTS:', err)
+          done()
+          const { BrowserTTSProvider } = await import('./browser-tts')
+          await new BrowserTTSProvider().speak(text)
+        })
       })
     } catch (err) {
       console.warn('ElevenLabs audio decode/play error, falling back to browser TTS:', err)
@@ -46,9 +58,14 @@ export class ElevenLabsProvider implements VoiceProvider {
   }
 
   stop(): void {
-    this.currentSource?.stop()
-    this.currentSource = null
-    this.audioContext?.close()
-    this.audioContext = null
+    if (this.currentAudio) {
+      this.currentAudio.pause()
+      this.currentAudio.currentTime = 0
+      this.currentAudio = null
+    }
+    if (this.currentObjectUrl) {
+      URL.revokeObjectURL(this.currentObjectUrl)
+      this.currentObjectUrl = null
+    }
   }
 }
