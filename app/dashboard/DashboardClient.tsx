@@ -1,12 +1,19 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import PlanOverview from '@/components/training/PlanOverview'
+import { Settings } from 'lucide-react'
 import { ALL_BADGES, getLevelInfo, type Exercise, type Schedule, type Streak } from '@/lib/types'
+
+interface ActivePlan {
+  id: string
+  exercises: Exercise[]
+  created_at: string
+  source: 'ai' | 'physio'
+}
 
 interface Props {
   hasActivePlan: boolean
-  initialExercises: Exercise[]
+  initialPlan: ActivePlan | null
   profile: {
     name: string | null
     xp: number
@@ -15,31 +22,111 @@ interface Props {
   streak: Streak | null
   earnedBadgeKeys: string[]
   schedule: Schedule | null
+  completedWeekDays: number[]
 }
 
-const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+const WEEK_DAYS = [
+  { day: 1, label: 'Mo' },
+  { day: 2, label: 'Di' },
+  { day: 3, label: 'Mi' },
+  { day: 4, label: 'Do' },
+  { day: 5, label: 'Fr' },
+  { day: 6, label: 'Sa' },
+  { day: 0, label: 'So' },
+]
+
+function parseNotifyTime(value: string | undefined) {
+  if (!value) return { hours: 7, minutes: 30 }
+  const [hoursStr = '7', minutesStr = '30'] = value.split(':')
+  return {
+    hours: Number(hoursStr),
+    minutes: Number(minutesStr),
+  }
+}
+
+function getNextReminderTime(days: number[], notifyTime: string | undefined): Date | null {
+  const now = new Date()
+  const { hours, minutes } = parseNotifyTime(notifyTime)
+
+  for (let offset = 0; offset <= 7; offset += 1) {
+    const date = new Date(now)
+    date.setDate(now.getDate() + offset)
+    if (!days.includes(date.getDay())) continue
+
+    const trainingStart = new Date(date)
+    trainingStart.setHours(hours, minutes, 0, 0)
+    const reminder = new Date(trainingStart.getTime() - 5 * 60 * 1000)
+
+    if (reminder > now) return reminder
+    if (trainingStart > now && trainingStart.getTime() - now.getTime() <= 5 * 60 * 1000) {
+      const immediate = new Date(now)
+      immediate.setSeconds(now.getSeconds() + 1, 0)
+      return immediate
+    }
+  }
+
+  return null
+}
 
 export default function DashboardClient({
   hasActivePlan,
-  initialExercises,
+  initialPlan,
   profile,
   streak,
   earnedBadgeKeys,
   schedule,
+  completedWeekDays,
 }: Props) {
   const [isGenerating, setIsGenerating] = useState(!hasActivePlan)
-  const [exercises, setExercises] = useState<Exercise[]>(initialExercises)
+  const [plan, setPlan] = useState<ActivePlan | null>(initialPlan)
   const [error, setError] = useState<string>()
+  const [notificationPermission, setNotificationPermission] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+  )
   const router = useRouter()
+  const reminderTimerRef = useRef<number | null>(null)
+
   const levelInfo = getLevelInfo(profile.xp)
   const nextThreshold = Number.isFinite(levelInfo.max) ? levelInfo.max : profile.xp + 250
   const progress = Math.min(100, ((profile.xp - levelInfo.min) / Math.max(1, nextThreshold - levelInfo.min)) * 100)
   const userName = profile.name?.trim() || 'du'
-  const completedCount = Math.max(1, Math.ceil(exercises.length * 0.25))
+  const exercises = plan?.exercises ?? []
+  const plannedDays = schedule?.days ?? [1, 3, 5]
+  const totalMinutes = Math.max(1, Math.round(
+    exercises.reduce((sum, exercise) => sum + (exercise.duration_seconds ?? 45), 0) / 60
+  ))
+  const phaseCounts = useMemo(() => ({
+    warmup: exercises.filter(exercise => exercise.phase === 'warmup').length,
+    main: exercises.filter(exercise => exercise.phase === 'main').length,
+    cooldown: exercises.filter(exercise => exercise.phase === 'cooldown').length,
+  }), [exercises])
 
   useEffect(() => {
-    if (!hasActivePlan) generatePlan()
+    if (!hasActivePlan) void generatePlan()
   }, [])
+
+  useEffect(() => {
+    if (notificationPermission !== 'granted' || !schedule) return
+    if (typeof window === 'undefined') return
+
+    const reminderAt = getNextReminderTime(schedule.days, schedule.notify_time)
+    if (!reminderAt) return
+
+    const delay = reminderAt.getTime() - Date.now()
+    if (delay <= 0 || delay > 24 * 60 * 60 * 1000) return
+
+    if (reminderTimerRef.current) window.clearTimeout(reminderTimerRef.current)
+    reminderTimerRef.current = window.setTimeout(() => {
+      new Notification('PhysioCoach', {
+        body: 'Dein Training startet in 5 Minuten.',
+      })
+    }, delay)
+
+    return () => {
+      if (reminderTimerRef.current) window.clearTimeout(reminderTimerRef.current)
+      reminderTimerRef.current = null
+    }
+  }, [notificationPermission, schedule])
 
   const generatePlan = async () => {
     setIsGenerating(true)
@@ -47,12 +134,26 @@ export default function DashboardClient({
     try {
       const res = await fetch('/api/generate-plan', { method: 'POST' })
       if (!res.ok) throw new Error('Plan generation failed')
-      const plan = await res.json()
-      setExercises(plan.exercises as Exercise[])
+      const generated = await res.json()
+      setPlan({
+        id: generated.id,
+        exercises: (generated.exercises as Exercise[]) ?? [],
+        created_at: generated.created_at ?? new Date().toISOString(),
+        source: (generated.source as 'ai' | 'physio') ?? 'ai',
+      })
     } catch {
       setError('Plan konnte nicht erstellt werden. Bitte erneut versuchen.')
     }
     setIsGenerating(false)
+  }
+
+  const enableNotifications = async () => {
+    if (typeof Notification === 'undefined') {
+      setNotificationPermission('unsupported')
+      return
+    }
+    const permission = await Notification.requestPermission()
+    setNotificationPermission(permission)
   }
 
   if (isGenerating) {
@@ -101,8 +202,12 @@ export default function DashboardClient({
               <span className="text-lg font-extrabold">{streak?.current ?? 0}</span>
               <span className="ml-2 text-sm font-semibold">Tage Streak</span>
             </div>
-            <button className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/14 text-white">
-              •
+            <button
+              onClick={() => router.push('/settings')}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/14 text-white"
+              aria-label="Einstellungen"
+            >
+              <Settings size={18} />
             </button>
           </div>
           <div className="mb-5">
@@ -142,8 +247,8 @@ export default function DashboardClient({
         </div>
       </section>
 
-      <section className="relative z-10 -mt-6 px-4">
-        <div className="mb-5 grid grid-cols-3 gap-3">
+      <section className="relative z-10 -mt-6 px-4 space-y-5">
+        <div className="grid grid-cols-3 gap-3">
           {[
             { emoji: '🔥', value: streak?.current ?? 0, label: 'Tage aktiv' },
             { emoji: '⚡', value: profile.xp, label: 'XP gesamt' },
@@ -157,37 +262,73 @@ export default function DashboardClient({
           ))}
         </div>
 
-        <div className="mb-3 flex items-center justify-between px-1">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">Heute</h2>
-          <button className="text-sm font-semibold text-[var(--teal)]" onClick={() => router.push('/training/session')}>
-            Loslegen
-          </button>
-        </div>
-        <div className="mb-5 overflow-hidden rounded-[20px] shadow-[var(--shadow-md)]">
-          <div className="relative px-5 py-6 text-white" style={{ background: 'linear-gradient(135deg, #F0724A, #F5A26A)' }}>
-            <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-white/10" />
-            <div className="relative z-10">
-              <div className="mb-2 inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-bold">Heutige Session</div>
-              <h3 className="font-display text-3xl leading-tight">Sanft aktivieren.</h3>
-              <p className="mt-2 text-sm text-white/80">
-                {exercises.length} Übungen · Fokus auf Nacken, Haltung und ruhige Bewegung
-              </p>
-              <div className="mt-5 flex items-center gap-3">
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/25">
-                  <div className="h-full rounded-full bg-white" style={{ width: `${(completedCount / Math.max(1, exercises.length)) * 100}%` }} />
-                </div>
-                <span className="text-sm font-semibold">{completedCount}/{Math.max(1, exercises.length)}</span>
-              </div>
-            </div>
+        <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Aktiver Plan</h2>
+            <span className="rounded-full bg-[var(--teal-light)] px-3 py-1 text-xs font-semibold text-[var(--teal)]">
+              {plan?.source === 'physio' ? 'Physio' : 'AI'}
+            </span>
+          </div>
+          <p className="text-sm text-[var(--text-secondary)]">
+            {exercises.length} Übungen · ca. {totalMinutes} Minuten · {phaseCounts.warmup}/{phaseCounts.main}/{phaseCounts.cooldown} Warmup/Haupt/Cooldown
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => router.push('/training/session')}
+              className="btn-primary rounded-[12px] py-3 text-sm"
+            >
+              Training starten
+            </button>
+            <button
+              onClick={() => router.push('/plan')}
+              className="rounded-[12px] border border-[var(--border)] bg-[var(--sand)] py-3 text-sm font-semibold text-[var(--text-primary)]"
+            >
+              Mehr Informationen
+            </button>
           </div>
         </div>
 
-        <PlanOverview
-          exercises={exercises}
-          onStartTraining={() => router.push('/training/session')}
-        />
+        <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Wochenübersicht</h2>
+            <span className="text-xs text-[var(--text-muted)]">
+              {schedule ? `${schedule.notify_time.slice(0, 5)} Uhr` : 'ohne Zeit'}
+            </span>
+          </div>
+          <div className="flex items-start gap-3 overflow-x-auto pb-1">
+            {WEEK_DAYS.map(({ day, label }) => {
+              const planned = plannedDays.includes(day)
+              const done = completedWeekDays.includes(day)
+              return (
+                <div key={label} className="min-w-[56px] text-center">
+                  <div
+                    className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border text-sm font-bold"
+                    style={{
+                      borderColor: planned ? 'var(--teal)' : 'var(--border)',
+                      background: done ? 'var(--teal)' : planned ? 'var(--teal-light)' : 'var(--sand)',
+                      color: done ? 'white' : planned ? 'var(--teal)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {done ? '✓' : label}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs">
+            <span className="text-[var(--text-secondary)]">✓ = Training erledigt</span>
+            {notificationPermission !== 'unsupported' && notificationPermission !== 'granted' && (
+              <button onClick={enableNotifications} className="font-semibold text-[var(--teal)]">
+                Reminder aktivieren
+              </button>
+            )}
+            {notificationPermission === 'granted' && (
+              <span className="font-semibold text-[var(--teal)]">Reminder aktiv</span>
+            )}
+          </div>
+        </div>
 
-        <div className="mt-7">
+        <div>
           <div className="mb-3 flex items-center justify-between px-1">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">Badges</h2>
             <span className="text-sm text-[var(--text-muted)]">{earnedBadgeKeys.length}/{ALL_BADGES.length}</span>
@@ -214,28 +355,6 @@ export default function DashboardClient({
               )
             })}
           </div>
-        </div>
-
-        <div className="mt-7 rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-          <div className="mb-2 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--teal)] text-2xl text-white">🩺</div>
-            <div>
-              <div className="font-semibold text-[var(--text-primary)]">Dr. Mia</div>
-              <div className="text-sm text-[var(--text-secondary)]">Dein Coach für heute</div>
-            </div>
-          </div>
-          <p className="text-sm leading-6 text-[var(--text-secondary)]">
-            {streak?.current ? `Du hältst seit ${streak.current} Tagen durch. Heute zählt wieder die ruhige Wiederholung, nicht Perfektion.` : 'Wir starten bewusst sanft. Eine kurze Session heute ist besser als auf den perfekten Moment zu warten.'}
-          </p>
-        </div>
-
-        <div className="mt-5 rounded-[20px] border border-[var(--border)] bg-[var(--sand)] p-5">
-          <div className="text-sm font-semibold text-[var(--text-primary)]">Rhythmus</div>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            {schedule
-              ? `${WEEKDAYS.filter((_, idx) => schedule.days.includes(idx)).join(', ')} um ${schedule.notify_time.slice(0, 5)} Uhr`
-              : 'Noch kein Trainingsrhythmus gespeichert'}
-          </p>
         </div>
       </section>
     </main>
