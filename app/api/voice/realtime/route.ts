@@ -4,6 +4,7 @@ import type { TranscriptMessage } from '@/lib/mem0'
 import { runVoiceTurnOrchestration } from '@/lib/voice/server-orchestrator'
 
 export async function POST(request: Request) {
+  const startedAt = Date.now()
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -25,8 +26,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       reply: result.reply,
       llmLatencyMs: result.llmLatencyMs,
+      totalLatencyMs: Math.max(0, Date.now() - startedAt),
+      ttsStreamUrl: `/api/voice/stream?text=${encodeURIComponent(result.reply)}`,
     })
   } catch {
-    return NextResponse.json({ error: 'Voice orchestration failed' }, { status: 502 })
+    return NextResponse.json({ error: 'Realtime orchestration failed' }, { status: 502 })
   }
 }

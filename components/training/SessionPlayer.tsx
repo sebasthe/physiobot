@@ -83,6 +83,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const realtimeOrchestratorRef = useRef<ElevenLabsRealtimeOrchestrator | null>(null)
   const listeningIdleTimerRef = useRef<number | null>(null)
+  const pendingTurnControllerRef = useRef<AbortController | null>(null)
   const userTranscriptRef = useRef('')
   const skipAutoSpeakRef = useRef(false)
   const activeTurnStartedAtRef = useRef<number | null>(null)
@@ -180,6 +181,8 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }
 
   const interruptAgent = () => {
+    pendingTurnControllerRef.current?.abort()
+    pendingTurnControllerRef.current = null
     stopSpeaking?.()
     trackVoiceEvent('interrupt', { mode })
     setAgentStatus('hoert_zu')
@@ -276,6 +279,8 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
 
     return () => {
       cancelled = true
+      pendingTurnControllerRef.current?.abort()
+      pendingTurnControllerRef.current = null
       stopAllListening()
     }
   }, [])
@@ -356,6 +361,8 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }
 
   const handleStop = () => {
+    pendingTurnControllerRef.current?.abort()
+    pendingTurnControllerRef.current = null
     stopAllListening()
     stopSpeaking?.()
     onComplete({ transcript, completedExercises: exercises.slice(0, Math.max(1, currentIndex)) })
@@ -477,27 +484,40 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     const messages = [...transcript, { role: 'user' as const, content: trimmedMessage }]
     setTranscript(messages)
     try {
-      const response = await fetch('/api/voice/session', {
+      const controller = new AbortController()
+      pendingTurnControllerRef.current?.abort()
+      pendingTurnControllerRef.current = controller
+
+      const response = await fetch('/api/voice/realtime', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           messages,
           currentExercise: current,
         }),
       })
+      if (!response.ok) throw new Error('Realtime turn failed')
       const data = await response.json()
       const reply = typeof data.reply === 'string' && data.reply.trim()
         ? data.reply.trim()
         : 'Okay, wir machen es einfacher. Langsam und ohne Druck.'
       trackVoiceEvent('agent_reply_received', {
-        llmLatencyMs: Math.max(0, Date.now() - (activeTurnStartedAtRef.current ?? Date.now())),
+        llmLatencyMs: typeof data.llmLatencyMs === 'number'
+          ? data.llmLatencyMs
+          : Math.max(0, Date.now() - (activeTurnStartedAtRef.current ?? Date.now())),
+        totalLatencyMs: typeof data.totalLatencyMs === 'number' ? data.totalLatencyMs : null,
         chars: reply.length,
       })
       setCoachTranscript(reply)
       setTranscript(prev => [...prev, { role: 'assistant', content: reply }])
       setMode('coach')
       await speakWithStatus(reply)
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setIsResponding(false)
+        return
+      }
       trackVoiceEvent('voice_error', { stage: 'assistant_reply' })
       const fallback = 'Ich bin da. Lass uns die Bewegung langsam und ruhig zusammen machen.'
       setCoachTranscript(fallback)
@@ -505,6 +525,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       setMode('coach')
       await speakWithStatus(fallback)
     } finally {
+      pendingTurnControllerRef.current = null
       setIsResponding(false)
       activeTurnStartedAtRef.current = null
       if (mode !== 'listening') {

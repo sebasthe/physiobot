@@ -27,7 +27,7 @@ Datum: 2026-03-09
 
 ## Sprint 2 (Feinschliff - offen)
 - [x] ElevenLabs Streaming-TTS-End-to-End (progressives HTTP-Streaming für frühere Wiedergabe).
-- [ ] Serverseitige Session-Orchestrierung über dedizierten WebSocket-Service.
+- [x] Serverseitige dedizierte Turn-Orchestrierung über eigene Realtime-API (`/api/voice/realtime`) und Orchestrator-Service.
 - [x] Telemetrie-Basis: Turn-Latenz, STT-Fehlerraten, Interrupt- und Fallback-Events.
 - [x] Adaptive Prompting je Übungsphase (Warmup/Main/Cooldown Response-Hints).
 - [ ] Verbesserte Noise-/Echo-Strategien für iPhone Lautsprecherbetrieb.
@@ -38,3 +38,7 @@ Datum: 2026-03-09
 2. Gesprächsfluss ohne „Push-to-talk“-Gefühl.
 3. Stabiler Betrieb auf iPhone (Safari/PWA) inkl. Microphone-Permissions-Recovery.
 4. Graceful Degradation bei API-Limits/Netzproblemen.
+
+## Hinweis zur Architektur
+- WebSocket-Full-Duplex-Orchestrierung bleibt optional als späterer Schritt.  
+  Aktuell ist die serverseitige Turn-Orchestrierung dediziert ausgelagert und über Realtime-HTTP-Endpoints angebunden.
