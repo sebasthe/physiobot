@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from './DashboardClient'
-import type { Exercise, Schedule, Streak } from '@/lib/types'
+import type { Exercise, MotivationStyle, Schedule, Streak } from '@/lib/types'
 
 interface ActivePlanData {
   id: string
@@ -22,6 +22,35 @@ function getCurrentWeekRange() {
   return { start, end }
 }
 
+function compactGoalText(goal: string | null | undefined) {
+  if (!goal) return 'mehr Beweglichkeit und weniger Beschwerden'
+  const firstSentence = goal.split(/[.!?]/)[0]?.trim() ?? ''
+  if (!firstSentence) return 'mehr Beweglichkeit und weniger Beschwerden'
+  return firstSentence.length > 110 ? `${firstSentence.slice(0, 107)}...` : firstSentence
+}
+
+function buildPlanSummary(goal: string | null | undefined, motivationStyle: MotivationStyle | null | undefined) {
+  const compactGoal = compactGoalText(goal)
+  if (motivationStyle === 'goal_oriented') {
+    return `Ziel heute: ${compactGoal}. Jede Session bringt dich sichtbar näher an dein Ergebnis.`
+  }
+  if (motivationStyle === 'pain_avoidance') {
+    return `Ziel heute: ${compactGoal}. Ruhig, kontrolliert und so, dass dein Alltag spürbar leichter wird.`
+  }
+  return `Ziel heute: ${compactGoal}. Mit ruhigem Fokus, damit du Fortschritt siehst und dich gleichzeitig sicher fühlst.`
+}
+
+function buildMotivationSlogan(goal: string | null | undefined, motivationStyle: MotivationStyle | null | undefined) {
+  const compactGoal = compactGoalText(goal)
+  if (motivationStyle === 'goal_oriented') {
+    return `Du trainierst für dein Ziel: ${compactGoal}. Ein Schritt heute zahlt direkt darauf ein.`
+  }
+  if (motivationStyle === 'pain_avoidance') {
+    return `Warum heute? Damit ${compactGoal.toLowerCase()} und dein Körper sich wieder verlässlicher anfühlt.`
+  }
+  return `Warum heute? Für ${compactGoal.toLowerCase()} und ein Körpergefühl, dem du wieder vertrauen kannst.`
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -30,7 +59,7 @@ export default async function DashboardPage() {
   // Check health profile exists
   const { data: healthProfile } = await supabase
     .from('health_profiles')
-    .select('id')
+    .select('id, goals')
     .eq('user_id', user.id)
     .single()
 
@@ -45,7 +74,7 @@ export default async function DashboardPage() {
 
   const { start, end } = getCurrentWeekRange()
 
-  const [{ data: streak }, { data: badges }, { data: schedule }, { data: completedSessions }] = await Promise.all([
+  const [{ data: streak }, { data: badges }, { data: schedule }, { data: completedSessions }, { data: personality }] = await Promise.all([
     supabase.from('streaks').select('current, longest, last_session, freeze_days').eq('user_id', user.id).maybeSingle(),
     supabase.from('badges_earned').select('badge_key').eq('user_id', user.id),
     supabase.from('schedules').select('days, notify_time, timezone').eq('user_id', user.id).maybeSingle(),
@@ -56,6 +85,7 @@ export default async function DashboardPage() {
       .not('completed_at', 'is', null)
       .gte('completed_at', start.toISOString())
       .lt('completed_at', end.toISOString()),
+    supabase.from('user_personality').select('motivation_style').eq('user_id', user.id).maybeSingle(),
   ])
 
   let activePlan: ActivePlanData | null = null
@@ -83,6 +113,10 @@ export default async function DashboardPage() {
     )
   )
 
+  const motivationStyle = (personality?.motivation_style as MotivationStyle | null | undefined) ?? null
+  const planSummary = buildPlanSummary(healthProfile.goals, motivationStyle)
+  const motivationSlogan = buildMotivationSlogan(healthProfile.goals, motivationStyle)
+
   return (
     <DashboardClient
       hasActivePlan={!!activePlan}
@@ -96,6 +130,8 @@ export default async function DashboardPage() {
       earnedBadgeKeys={(badges ?? []).map(badge => badge.badge_key)}
       schedule={(schedule as Schedule | null) ?? null}
       completedWeekDays={completedWeekDays}
+      planSummary={planSummary}
+      motivationSlogan={motivationSlogan}
     />
   )
 }

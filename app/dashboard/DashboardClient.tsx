@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Settings } from 'lucide-react'
-import { ALL_BADGES, getLevelInfo, type Exercise, type Schedule, type Streak } from '@/lib/types'
+import { getLevelInfo, type Exercise, type Schedule, type Streak } from '@/lib/types'
 
 interface ActivePlan {
   id: string
@@ -23,6 +23,8 @@ interface Props {
   earnedBadgeKeys: string[]
   schedule: Schedule | null
   completedWeekDays: number[]
+  planSummary: string
+  motivationSlogan: string
 }
 
 const WEEK_DAYS = [
@@ -76,6 +78,8 @@ export default function DashboardClient({
   earnedBadgeKeys,
   schedule,
   completedWeekDays,
+  planSummary,
+  motivationSlogan,
 }: Props) {
   const [isGenerating, setIsGenerating] = useState(!hasActivePlan)
   const [plan, setPlan] = useState<ActivePlan | null>(initialPlan)
@@ -248,18 +252,32 @@ export default function DashboardClient({
       </section>
 
       <section className="relative z-10 -mt-6 px-4 space-y-5">
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { emoji: '🔥', value: streak?.current ?? 0, label: 'Tage aktiv' },
-            { emoji: '⚡', value: profile.xp, label: 'XP gesamt' },
-            { emoji: '🏅', value: earnedBadgeKeys.length, label: 'Badges' },
-          ].map((item, index) => (
-            <div key={item.label} className="rounded-2xl bg-white px-3 py-4 text-center shadow-[var(--shadow-md)] animate-pop-in" style={{ animationDelay: `${index * 80}ms` }}>
-              <div className="text-2xl">{item.emoji}</div>
-              <div className="mt-1 text-xl font-extrabold text-[var(--text-primary)]">{item.value}</div>
-              <div className="text-[11px] font-medium text-[var(--text-muted)]">{item.label}</div>
-            </div>
-          ))}
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-[20px] bg-white px-2.5 py-3 text-center shadow-[var(--shadow-md)] animate-pop-in">
+            <div className="text-xl">🔥</div>
+            <div className="mt-0.5 text-lg font-extrabold text-[var(--text-primary)]">{streak?.current ?? 0}</div>
+            <div className="text-[10px] font-medium leading-tight text-[var(--text-muted)]">Tage aktiv</div>
+          </div>
+          <div className="rounded-[20px] bg-white px-2.5 py-3 text-center shadow-[var(--shadow-md)] animate-pop-in" style={{ animationDelay: '80ms' }}>
+            <div className="text-xl">⚡</div>
+            <div className="mt-0.5 text-lg font-extrabold text-[var(--text-primary)]">{profile.xp}</div>
+            <div className="text-[10px] font-medium leading-tight text-[var(--text-muted)]">XP gesamt</div>
+          </div>
+          <button
+            onClick={() => router.push('/badges')}
+            className="rounded-[20px] bg-white px-2.5 py-3 text-center shadow-[var(--shadow-md)] animate-pop-in"
+            style={{ animationDelay: '160ms' }}
+            aria-label="Badges öffnen"
+          >
+            <div className="text-xl">🏅</div>
+            <div className="mt-0.5 text-lg font-extrabold text-[var(--text-primary)]">{earnedBadgeKeys.length}</div>
+            <div className="text-[10px] font-medium leading-tight text-[var(--text-muted)]">Badges</div>
+          </button>
+        </div>
+
+        <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">Dein Warum</h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{motivationSlogan}</p>
         </div>
 
         <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
@@ -269,91 +287,69 @@ export default function DashboardClient({
               {plan?.source === 'physio' ? 'Physio' : 'AI'}
             </span>
           </div>
-          <p className="text-sm text-[var(--text-secondary)]">
-            {exercises.length} Übungen · ca. {totalMinutes} Minuten · {phaseCounts.warmup}/{phaseCounts.main}/{phaseCounts.cooldown} Warmup/Haupt/Cooldown
+          <div className="mb-3 mt-3 flex items-center justify-between">
+            <span className="text-xs font-semibold text-[var(--text-muted)]">Diese Woche</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[var(--text-muted)]">
+                {schedule ? `${schedule.notify_time.slice(0, 5)} Uhr` : 'ohne Zeit'}
+              </span>
+              {notificationPermission !== 'unsupported' && notificationPermission !== 'granted' && (
+                <button onClick={enableNotifications} className="text-xs font-semibold text-[var(--teal)]">
+                  Reminder
+                </button>
+              )}
+              {notificationPermission === 'granted' && (
+                <span className="text-xs font-semibold text-[var(--teal)]">Reminder aktiv</span>
+              )}
+            </div>
+          </div>
+          <div className="mb-4 overflow-x-auto pb-1">
+            <div className="relative mx-auto flex min-w-max items-center justify-center px-1">
+              <div
+                className="pointer-events-none absolute left-5 right-5 top-1/2 h-px -translate-y-1/2"
+                style={{ background: 'color-mix(in srgb, var(--teal) 24%, white)' }}
+              />
+              <div className="relative flex items-center gap-2">
+                {WEEK_DAYS.map(({ day, label }) => {
+                  const planned = plannedDays.includes(day)
+                  const done = completedWeekDays.includes(day)
+                  return (
+                    <div key={label} className="w-11 text-center">
+                      <div
+                        className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-[11px] font-bold"
+                        style={{
+                          borderColor: planned ? 'var(--teal)' : 'var(--border)',
+                          background: done ? 'var(--teal)' : planned ? 'var(--teal-light)' : 'var(--sand)',
+                          color: done ? 'white' : planned ? 'var(--teal)' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {done ? '✓' : label}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="text-center text-sm font-semibold text-[var(--text-primary)]">
+            {exercises.length} Übungen · ca. {totalMinutes} Minuten · {phaseCounts.warmup}/{phaseCounts.main}/{phaseCounts.cooldown}
+          </div>
+          <p className="mt-2 text-center text-sm leading-6 text-[var(--text-secondary)]">
+            {planSummary}
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-4">
             <button
               onClick={() => router.push('/training/session')}
-              className="btn-primary rounded-[12px] py-3 text-sm"
+              className="btn-primary w-full rounded-[12px] py-3 text-base"
             >
-              Training starten
+              Loslegen
             </button>
             <button
               onClick={() => router.push('/plan')}
-              className="rounded-[12px] border border-[var(--border)] bg-[var(--sand)] py-3 text-sm font-semibold text-[var(--text-primary)]"
+              className="mt-2 w-full py-1 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
             >
-              Mehr Informationen
+              Mehr Informationen zum Plan
             </button>
-          </div>
-        </div>
-
-        <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Wochenübersicht</h2>
-            <span className="text-xs text-[var(--text-muted)]">
-              {schedule ? `${schedule.notify_time.slice(0, 5)} Uhr` : 'ohne Zeit'}
-            </span>
-          </div>
-          <div className="flex items-start gap-3 overflow-x-auto pb-1">
-            {WEEK_DAYS.map(({ day, label }) => {
-              const planned = plannedDays.includes(day)
-              const done = completedWeekDays.includes(day)
-              return (
-                <div key={label} className="min-w-[56px] text-center">
-                  <div
-                    className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border text-sm font-bold"
-                    style={{
-                      borderColor: planned ? 'var(--teal)' : 'var(--border)',
-                      background: done ? 'var(--teal)' : planned ? 'var(--teal-light)' : 'var(--sand)',
-                      color: done ? 'white' : planned ? 'var(--teal)' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {done ? '✓' : label}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <div className="mt-4 flex items-center justify-between text-xs">
-            <span className="text-[var(--text-secondary)]">✓ = Training erledigt</span>
-            {notificationPermission !== 'unsupported' && notificationPermission !== 'granted' && (
-              <button onClick={enableNotifications} className="font-semibold text-[var(--teal)]">
-                Reminder aktivieren
-              </button>
-            )}
-            {notificationPermission === 'granted' && (
-              <span className="font-semibold text-[var(--teal)]">Reminder aktiv</span>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-3 flex items-center justify-between px-1">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Badges</h2>
-            <span className="text-sm text-[var(--text-muted)]">{earnedBadgeKeys.length}/{ALL_BADGES.length}</span>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1">
-            {ALL_BADGES.map(badge => {
-              const earned = earnedBadgeKeys.includes(badge.key)
-              return (
-                <div
-                  key={badge.key}
-                  className="min-w-28 rounded-[20px] border bg-white p-4 text-center shadow-[var(--shadow-sm)]"
-                  style={{
-                    borderColor: earned ? 'var(--gold)' : 'var(--border)',
-                    background: earned ? 'var(--gold-light)' : 'var(--card)',
-                    opacity: earned ? 1 : 0.55,
-                  }}
-                >
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-2xl" style={{ background: earned ? 'var(--gold-light)' : 'var(--sand)' }}>
-                    {badge.emoji}
-                  </div>
-                  <div className="mt-3 text-xs font-bold text-[var(--text-primary)]">{badge.name}</div>
-                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">{badge.description}</div>
-                </div>
-              )
-            })}
           </div>
         </div>
       </section>
