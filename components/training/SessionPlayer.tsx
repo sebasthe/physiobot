@@ -133,6 +133,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const nextLabel = nextExercise
     ? `${nextExercise.name} · ${nextExercise.duration_seconds ? `${nextExercise.duration_seconds}s` : `${nextExercise.sets ?? 1}×${nextExercise.repetitions ?? 8}`}`
     : 'Session abschließen'
+  const isSpeakModeView = isMicModeEnabled || mode === 'listening' || isResponding || agentStatus === 'versteht' || agentStatus === 'antwortet'
 
   const trackVoiceEvent = (eventType: VoiceTelemetryEvent, payload: Record<string, unknown> = {}) => {
     void fetch('/api/voice/telemetry', {
@@ -575,7 +576,9 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       setAgentStatus('bereit')
       recognitionRef.current = null
       clearListeningIdleTimer()
-      setIsMicModeEnabled(false)
+      if (micModeEnabledRef.current && !isPaused) {
+        scheduleListeningResume(600)
+      }
     }
   }
 
@@ -594,6 +597,15 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     setIsMicModeEnabled(true)
     setVoiceHint('Mikrofon aktiv. Ich höre kontinuierlich zu.')
     startListening()
+  }
+
+  const exitSpeakMode = () => {
+    micModeEnabledRef.current = false
+    setIsMicModeEnabled(false)
+    stopAllListening()
+    setMode('coach')
+    setAgentStatus('bereit')
+    setVoiceHint(undefined)
   }
 
   const queueCommittedTranscript = (text: string, source: 'realtime' | 'browser') => {
@@ -847,7 +859,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
         <div
           className="px-6 pb-7 pt-[max(1rem,var(--safe-top))] text-white"
           style={{
-            background: mode === 'listening'
+            background: isSpeakModeView
               ? 'linear-gradient(180deg, #1A0E0A 0%, #1A1209 100%)'
               : 'linear-gradient(180deg, #0A1714 0%, #0F1F1C 100%)',
           }}
@@ -872,6 +884,16 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
               {String(Math.floor(sessionSecondsLeft / 60)).padStart(2, '0')}:{String(sessionSecondsLeft % 60).padStart(2, '0')}
             </div>
           </div>
+          {isMicModeEnabled && (
+            <div className="mb-3 flex">
+              <button
+                onClick={exitSpeakMode}
+                className="rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/85"
+              >
+                ← Zurück
+              </button>
+            </div>
+          )}
           <div className="mb-4 flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-white/60">Live-Status</span>
             <span className="rounded-full border border-white/15 bg-white/8 px-3 py-1 text-xs font-semibold text-white/85">
@@ -928,16 +950,21 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
             </div>
           </div>
 
-          {mode === 'listening' ? (
+          {isSpeakModeView ? (
             <>
               <div className="mb-4 flex items-center justify-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-[var(--peach)] animate-pulse" />
-                <span className="text-xs font-bold uppercase tracking-[0.08em] text-[rgba(240,114,74,0.9)]">Dr. Mia hört zu</span>
+                <span className="text-xs font-bold uppercase tracking-[0.08em] text-[rgba(240,114,74,0.9)]">
+                  {agentStatus === 'hoert_zu' && 'Dr. Mia hört zu'}
+                  {agentStatus === 'versteht' && 'Dr. Mia verarbeitet'}
+                  {agentStatus === 'antwortet' && 'Dr. Mia antwortet'}
+                  {agentStatus === 'bereit' && 'Speak-Modus aktiv'}
+                </span>
               </div>
               <div className="rounded-2xl border border-[rgba(240,114,74,0.2)] bg-[rgba(240,114,74,0.08)] p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(240,114,74,0.65)]">Du sagst</p>
                 <p className="text-[15px] leading-7 text-white/90">
-                  {userTranscript || 'Ich höre zu…'}
+                  {userTranscript || (agentStatus === 'hoert_zu' ? 'Ich höre zu…' : 'Bereit für deinen nächsten Satz.')}
                 </p>
               </div>
               <div className="mb-3 mt-3 flex h-10 items-end justify-center gap-[3px]">
