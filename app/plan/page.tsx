@@ -1,7 +1,17 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
+import TransitionLink from '@/components/navigation/TransitionLink'
 import { createClient } from '@/lib/supabase/server'
 import type { Exercise } from '@/lib/types'
+
+interface ProfileWithPlan {
+  active_plan_id: string | null
+  training_plans?: {
+    id: string
+    exercises: Exercise[]
+    created_at: string
+    source: 'ai' | 'physio'
+  } | null
+}
 
 const PHASES = [
   { key: 'warmup', label: 'Aufwärmen', emoji: '🔥' },
@@ -16,19 +26,14 @@ export default async function PlanPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('active_plan_id')
+    .select('active_plan_id, training_plans!fk_active_plan(id, exercises, created_at, source)')
     .eq('id', user.id)
     .single()
 
-  if (!profile?.active_plan_id) redirect('/dashboard')
+  const typedProfile = profile as ProfileWithPlan | null
+  const plan = typedProfile?.training_plans ?? null
 
-  const { data: plan } = await supabase
-    .from('training_plans')
-    .select('id, exercises, created_at, source')
-    .eq('id', profile.active_plan_id)
-    .single()
-
-  if (!plan) redirect('/dashboard')
+  if (!typedProfile?.active_plan_id || !plan) redirect('/dashboard')
 
   const exercises = (plan.exercises as Exercise[]) ?? []
   const totalMinutes = Math.max(1, Math.round(
@@ -38,9 +43,9 @@ export default async function PlanPage() {
   return (
     <main className="mx-auto min-h-screen max-w-[430px] px-5 pb-10 pt-8">
       <div className="mb-6">
-        <Link href="/dashboard" className="mb-4 inline-flex text-sm font-semibold text-[var(--teal)]">
+        <TransitionLink href="/dashboard" className="mb-4 inline-flex text-sm font-semibold text-[var(--teal)]">
           ← Zurück zum Dashboard
-        </Link>
+        </TransitionLink>
         <div className="text-phase mb-2 text-[var(--teal)]">Aktiver Plan</div>
         <h1 className="font-display text-5xl leading-none text-[var(--foreground)]">Übungsdetails</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">

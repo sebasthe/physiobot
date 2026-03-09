@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { DM_Sans, Fraunces } from 'next/font/google'
+import PageTransition from '@/components/navigation/PageTransition'
 import './globals.css'
 
 const fraunces = Fraunces({
@@ -21,6 +22,16 @@ export const metadata: Metadata = {
   title: 'PhysioCoach',
   description: 'Dein AI-Physiotherapie-Coach',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+    shortcut: ['/favicon.ico'],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -45,7 +56,7 @@ export default function RootLayout({
       <body
         className={`${fraunces.variable} ${dmSans.variable} antialiased`}
       >
-        {children}
+        <PageTransition>{children}</PageTransition>
       </body>
     </html>
   )

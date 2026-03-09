@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import TransitionLink from '@/components/navigation/TransitionLink'
 import { ALL_BADGES } from '@/lib/types'
 import { createClient } from '@/lib/supabase/server'
 
@@ -20,9 +20,9 @@ export default async function BadgesPage() {
   return (
     <main className="mx-auto min-h-screen max-w-[430px] px-5 pb-10 pt-8">
       <div className="mb-6">
-        <Link href="/dashboard" className="mb-4 inline-flex text-sm font-semibold text-[var(--teal)]">
+        <TransitionLink href="/dashboard" className="mb-4 inline-flex text-sm font-semibold text-[var(--teal)]">
           ← Zurück zum Dashboard
-        </Link>
+        </TransitionLink>
         <div className="text-phase mb-2 text-[var(--teal)]">Fortschritt</div>
         <h1 className="font-display text-5xl leading-none text-[var(--foreground)]">Badges</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">

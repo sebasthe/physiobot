@@ -56,25 +56,27 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Check health profile exists
-  const { data: healthProfile } = await supabase
-    .from('health_profiles')
-    .select('id, goals')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!healthProfile) redirect('/onboarding/personality')
-
-  // Get profile with active plan
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('active_plan_id, xp, level, name')
-    .eq('id', user.id)
-    .single()
-
   const { start, end } = getCurrentWeekRange()
 
-  const [{ data: streak }, { data: badges }, { data: schedule }, { data: completedSessions }, { data: personality }] = await Promise.all([
+  const [
+    { data: healthProfile },
+    { data: profile },
+    { data: streak },
+    { data: badges },
+    { data: schedule },
+    { data: completedSessions },
+    { data: personality },
+  ] = await Promise.all([
+    supabase
+      .from('health_profiles')
+      .select('id, goals')
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('profiles')
+      .select('active_plan_id, xp, level, name')
+      .eq('id', user.id)
+      .single(),
     supabase.from('streaks').select('current, longest, last_session, freeze_days').eq('user_id', user.id).maybeSingle(),
     supabase.from('badges_earned').select('badge_key').eq('user_id', user.id),
     supabase.from('schedules').select('days, notify_time, timezone').eq('user_id', user.id).maybeSingle(),
@@ -87,6 +89,8 @@ export default async function DashboardPage() {
       .lt('completed_at', end.toISOString()),
     supabase.from('user_personality').select('motivation_style').eq('user_id', user.id).maybeSingle(),
   ])
+
+  if (!healthProfile) redirect('/onboarding/personality')
 
   let activePlan: ActivePlanData | null = null
   if (profile?.active_plan_id) {

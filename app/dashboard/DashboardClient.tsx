@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Settings } from 'lucide-react'
+import { useSoftNavigation } from '@/lib/navigation'
 import { getLevelInfo, type Exercise, type Schedule, type Streak } from '@/lib/types'
 
 interface ActivePlan {
@@ -87,7 +87,7 @@ export default function DashboardClient({
   const [notificationPermission, setNotificationPermission] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
   )
-  const router = useRouter()
+  const router = useSoftNavigation()
   const reminderTimerRef = useRef<number | null>(null)
 
   const levelInfo = getLevelInfo(profile.xp)
@@ -108,6 +108,12 @@ export default function DashboardClient({
   useEffect(() => {
     if (!hasActivePlan) void generatePlan()
   }, [])
+
+  useEffect(() => {
+    router.prefetch('/badges')
+    router.prefetch('/plan')
+    router.prefetch('/settings')
+  }, [router])
 
   useEffect(() => {
     if (notificationPermission !== 'granted' || !schedule) return

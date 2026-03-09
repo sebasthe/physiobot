@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Home, Zap, TrendingUp } from 'lucide-react'
+import TransitionLink from '@/components/navigation/TransitionLink'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'HOME',       icon: Home },
@@ -34,7 +34,7 @@ export default function AppShell({ children }: AppShellProps) {
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || (href !== '/training/session' && pathname.startsWith(href))
             return (
-              <Link
+              <TransitionLink
                 key={href}
                 href={href}
                 className={`nav-item relative ${isActive ? 'nav-item--active' : ''}`}
@@ -45,7 +45,7 @@ export default function AppShell({ children }: AppShellProps) {
                 />
                 <span className="nav-label">{label}</span>
                 {isActive && <span className="progress-dot" />}
-              </Link>
+              </TransitionLink>
             )
           })}
         </nav>
