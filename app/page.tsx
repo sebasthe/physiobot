@@ -13,39 +13,31 @@ export default async function Home() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
-      {/* Ambient glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(240,160,75,0.08) 0%, transparent 70%)',
-        }}
-      />
-
+    <main className="vital-gradient relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6">
       <div className="relative z-10 text-center space-y-6 animate-slide-up">
         <div className="text-phase" style={{ color: 'var(--primary)', letterSpacing: '0.2em', fontSize: '0.7rem' }}>
           DEIN COACH WARTET
         </div>
 
-        <h1 className="font-display uppercase" style={{ fontSize: 'clamp(4rem, 20vw, 7rem)', lineHeight: 0.9 }}>
+        <h1 className="font-display uppercase" style={{ fontSize: 'clamp(4.4rem, 22vw, 7.4rem)', lineHeight: 0.86 }}>
           Physio
           <span style={{ color: 'var(--primary)' }}>Bot</span>
         </h1>
 
-        <p className="text-sm max-w-xs mx-auto leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+        <p className="mx-auto max-w-xs text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           Personalisierte Physiotherapie mit KI-Coach — abgestimmt auf dich.
         </p>
 
-        <div className="flex flex-col gap-3 pt-4">
+        <div className="glass-card mx-auto flex w-full max-w-sm flex-col gap-3 rounded-[28px] p-4 pt-5">
           <TransitionLink
             href="/auth/register"
-            className="btn-primary inline-flex items-center justify-center rounded-xl px-8 py-4 font-display text-lg tracking-widest uppercase"
+            className="btn-primary inline-flex items-center justify-center rounded-2xl px-8 py-4 font-display text-lg tracking-[0.16em] uppercase"
           >
             Loslegen
           </TransitionLink>
           <TransitionLink
             href="/auth/login"
-            className="inline-flex items-center justify-center rounded-xl px-8 py-4 text-sm transition-colors"
+            className="inline-flex items-center justify-center rounded-2xl px-8 py-4 text-sm transition-colors hover:bg-white/4"
             style={{ color: 'var(--text-secondary)' }}
           >
             Bereits registriert? Anmelden

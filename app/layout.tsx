@@ -1,20 +1,26 @@
 import type { Metadata } from 'next'
-import { DM_Sans, Fraunces } from 'next/font/google'
+import { Bebas_Neue, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
+import AppShell from '@/components/layout/AppShell'
 import PageTransition from '@/components/navigation/PageTransition'
 import './globals.css'
 
-const fraunces = Fraunces({
+const displayFont = Bebas_Neue({
   variable: '--font-display',
   subsets: ['latin'],
-  weight: ['300', '600', '700'],
-  style: ['normal', 'italic'],
+  weight: '400',
   display: 'swap',
 })
 
-const dmSans = DM_Sans({
+const bodyFont = Plus_Jakarta_Sans({
   variable: '--font-body',
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
+  display: 'swap',
+})
+
+const monoFont = Geist_Mono({
+  variable: '--font-code',
+  subsets: ['latin'],
   display: 'swap',
 })
 
@@ -50,13 +56,15 @@ export default function RootLayout({
   return (
     <html lang="de" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#1D7A6A" />
+        <meta name="theme-color" content="#0D0B09" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
       <body
-        className={`${fraunces.variable} ${dmSans.variable} antialiased`}
+        className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} antialiased`}
       >
-        <PageTransition>{children}</PageTransition>
+        <AppShell>
+          <PageTransition>{children}</PageTransition>
+        </AppShell>
       </body>
     </html>
   )

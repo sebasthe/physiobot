@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Settings } from 'lucide-react'
+import { ArrowRight, Clock, Flame, Quote, Settings, Target, User, Zap } from 'lucide-react'
 import { useSoftNavigation } from '@/lib/navigation'
+import { Progress } from '@/components/ui/progress'
 import { getLevelInfo, type Exercise, type Schedule, type Streak } from '@/lib/types'
 
 interface ActivePlan {
@@ -199,166 +200,174 @@ export default function DashboardClient({
   }
 
   return (
-    <main className="min-h-screen pb-10" style={{ paddingTop: 'var(--safe-top)' }}>
-      <section
-        className="relative overflow-hidden px-6 pb-10 pt-6"
-        style={{ background: 'linear-gradient(135deg, #1D7A6A 0%, #2A9D8A 55%, #3BB89A 100%)' }}
-      >
-        <div className="absolute -right-10 -top-16 h-52 w-52 rounded-full bg-white/8" />
-        <div className="absolute -bottom-20 left-0 h-40 w-40 rounded-full bg-white/7" />
-        <div className="relative z-10">
-          <div className="mb-6 flex items-start justify-between">
-            <div className="rounded-full border border-white/20 bg-white/14 px-4 py-2 text-white backdrop-blur">
-              <span className="text-lg font-extrabold">{streak?.current ?? 0}</span>
-              <span className="ml-2 text-sm font-semibold">Tage Streak</span>
+    <main className="dashboard-page vital-gradient min-h-screen overflow-x-hidden pb-32 lg:min-h-full lg:pb-12" style={{ paddingTop: 'var(--safe-top)' }}>
+      <div className="dashboard-layout p-6 pt-12 lg:px-10 lg:pb-10 xl:grid xl:grid-cols-[minmax(0,0.78fr)_minmax(23rem,0.52fr)] xl:gap-x-8 xl:gap-y-10 xl:px-12 xl:pt-14">
+        <div className="dashboard-topbar mb-10 flex items-center justify-between xl:col-span-2 xl:mb-0">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(42,157,138,0.2)] bg-[rgba(42,157,138,0.18)] text-[var(--accent)]">
+              <User size={20} />
             </div>
-            <button
-              onClick={() => router.push('/settings')}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/14 text-white"
-              aria-label="Einstellungen"
-            >
-              <Settings size={18} />
-            </button>
-          </div>
-          <div className="mb-5">
-            <div className="mb-2 inline-flex rounded-full bg-white/12 px-3 py-1 text-xs font-medium text-white/80">
-              Heute mit Dr. Mia
-            </div>
-            <h1 className="font-display text-4xl leading-tight text-white md:text-5xl">
-              Guten Morgen, <em>{userName}</em>.
-            </h1>
-            <p className="mt-3 max-w-sm text-sm leading-6 text-white/78">
-              Kleine Schritte heute. Konstanz baut Vertrauen in deinen Körper auf.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/18 bg-white/12 p-4 backdrop-blur">
-            <div className="mb-2 flex items-center justify-between text-xs text-white/75">
-              <span>Level {profile.level} · {levelInfo.title}</span>
-              <strong className="text-white">{profile.xp} XP</strong>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/15">
-              <div
-                className="relative h-full rounded-full"
-                style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #A8F0E0, #6FD4C0)' }}
-              >
-                <div
-                  className="absolute inset-y-0 left-[-3rem] w-10"
-                  style={{
-                    animation: 'shimmer 2.2s infinite',
-                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)',
-                  }}
-                />
+            <div>
+              <div className="mb-0.5 text-[10px] uppercase tracking-[0.24em] text-white/40">Momentum</div>
+              <div className="flex items-center gap-1 text-sm font-bold text-white">
+                {streak?.current ?? 0} Tage <Flame size={14} className="text-[var(--primary)]" />
               </div>
             </div>
-            <div className="mt-2 text-right text-xs font-semibold text-[#A8F0E0]">
-              {Math.max(0, nextThreshold - profile.xp)} XP bis Level {profile.level + 1}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="relative z-10 -mt-6 px-4 space-y-5">
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-[20px] bg-white px-2.5 py-3 text-center shadow-[var(--shadow-md)] animate-pop-in">
-            <div className="text-xl">🔥</div>
-            <div className="mt-0.5 text-lg font-extrabold text-[var(--text-primary)]">{streak?.current ?? 0}</div>
-            <div className="text-[10px] font-medium leading-tight text-[var(--text-muted)]">Tage aktiv</div>
-          </div>
-          <div className="rounded-[20px] bg-white px-2.5 py-3 text-center shadow-[var(--shadow-md)] animate-pop-in" style={{ animationDelay: '80ms' }}>
-            <div className="text-xl">⚡</div>
-            <div className="mt-0.5 text-lg font-extrabold text-[var(--text-primary)]">{profile.xp}</div>
-            <div className="text-[10px] font-medium leading-tight text-[var(--text-muted)]">XP gesamt</div>
           </div>
           <button
-            onClick={() => router.push('/badges')}
-            className="rounded-[20px] bg-white px-2.5 py-3 text-center shadow-[var(--shadow-md)] animate-pop-in"
-            style={{ animationDelay: '160ms' }}
-            aria-label="Badges öffnen"
+            onClick={() => router.push('/settings')}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/5 bg-white/5 text-white/70 backdrop-blur-sm"
+            aria-label="Einstellungen"
           >
-            <div className="text-xl">🏅</div>
-            <div className="mt-0.5 text-lg font-extrabold text-[var(--text-primary)]">{earnedBadgeKeys.length}</div>
-            <div className="text-[10px] font-medium leading-tight text-[var(--text-muted)]">Badges</div>
+            <Settings size={18} />
           </button>
         </div>
 
-        <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">Dein Warum</h2>
-          <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{motivationSlogan}</p>
+        <div className="dashboard-hero mb-10 animate-slide-up xl:mb-0">
+          <h1 className="dashboard-heading mb-3 font-display text-5xl uppercase leading-[0.9] tracking-tight text-white">
+            Heute zählt
+            <br />
+            dein Momentum.
+          </h1>
+          <p className="dashboard-subcopy text-lg leading-snug text-white/60">
+            {userName}, {motivationSlogan.charAt(0).toLowerCase() + motivationSlogan.slice(1)}
+          </p>
         </div>
 
-        <div className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">Aktiver Plan</h2>
-            <span className="rounded-full bg-[var(--teal-light)] px-3 py-1 text-xs font-semibold text-[var(--teal)]">
-              {plan?.source === 'physio' ? 'Physio' : 'AI'}
-            </span>
-          </div>
-          <div className="mb-3 mt-3 flex items-center justify-between">
-            <span className="text-xs font-semibold text-[var(--text-muted)]">Diese Woche</span>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--text-muted)]">
-                {schedule ? `${schedule.notify_time.slice(0, 5)} Uhr` : 'ohne Zeit'}
-              </span>
-              {notificationPermission !== 'unsupported' && notificationPermission !== 'granted' && (
-                <button onClick={enableNotifications} className="text-xs font-semibold text-[var(--teal)]">
-                  Reminder
-                </button>
-              )}
-              {notificationPermission === 'granted' && (
-                <span className="text-xs font-semibold text-[var(--teal)]">Reminder aktiv</span>
-              )}
-            </div>
-          </div>
-          <div className="mb-4 overflow-x-auto pb-1">
-            <div className="relative mx-auto flex min-w-max items-center justify-center px-1">
-              <div
-                className="pointer-events-none absolute left-5 right-5 top-1/2 h-px -translate-y-1/2"
-                style={{ background: 'color-mix(in srgb, var(--teal) 24%, white)' }}
-              />
-              <div className="relative flex items-center gap-2">
-                {WEEK_DAYS.map(({ day, label }) => {
-                  const planned = plannedDays.includes(day)
-                  const done = completedWeekDays.includes(day)
-                  return (
-                    <div key={label} className="w-11 text-center">
-                      <div
-                        className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-[11px] font-bold"
-                        style={{
-                          borderColor: planned ? 'var(--teal)' : 'var(--border)',
-                          background: done ? 'var(--teal)' : planned ? 'var(--teal-light)' : 'var(--sand)',
-                          color: done ? 'white' : planned ? 'var(--teal)' : 'var(--text-secondary)',
-                        }}
-                      >
-                        {done ? '✓' : label}
-                      </div>
-                    </div>
-                  )
-                })}
+        <div className="dashboard-status relative mb-10 xl:mb-0 xl:self-start">
+          <div className="absolute -inset-4 rounded-full bg-[rgba(42,157,138,0.06)] blur-3xl" />
+          <div className="glass-card relative overflow-hidden rounded-[28px] border-white/5">
+            <div className="p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Aktueller Status</div>
+                  <div className="font-display text-xl uppercase tracking-tight text-[var(--accent)]">{levelInfo.title}</div>
+                </div>
+                <div className="text-right">
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-white/40">Level</div>
+                  <div className="font-display text-3xl leading-none text-white">{profile.level}</div>
+                </div>
+              </div>
+              <Progress value={progress} className="h-1.5 bg-white/5" />
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-[0.24em] text-white/20">{profile.xp} XP</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--accent)]">
+                  {nextThreshold} XP Ziel
+                </span>
               </div>
             </div>
           </div>
-          <div className="text-center text-sm font-semibold text-[var(--text-primary)]">
-            {exercises.length} Übungen · ca. {totalMinutes} Minuten · {phaseCounts.warmup}/{phaseCounts.main}/{phaseCounts.cooldown}
+        </div>
+
+        <div className="dashboard-focus mb-10 animate-slide-up xl:order-4 xl:mb-0 xl:self-start" style={{ animationDelay: '120ms' }}>
+          <div className="flex items-start gap-4 rounded-3xl border border-[rgba(240,160,75,0.12)] bg-[rgba(240,160,75,0.05)] p-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(240,160,75,0.18)] text-[var(--primary)]">
+              <Target size={20} />
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] uppercase tracking-[0.24em] text-[rgba(240,160,75,0.6)]">Dein Fokus</div>
+              <p className="text-sm font-medium italic leading-6 text-white/80">
+                "{planSummary}"
+              </p>
+            </div>
           </div>
-          <p className="mt-2 text-center text-sm leading-6 text-[var(--text-secondary)]">
-            {planSummary}
-          </p>
-          <div className="mt-4">
+        </div>
+
+        <div className="dashboard-session glass-card relative overflow-hidden rounded-[30px] border-white/5 shadow-2xl shadow-[rgba(42,157,138,0.08)] xl:order-3 xl:self-start">
+          <div className="absolute right-0 top-0 p-4">
+            <span className="rounded-md bg-[rgba(42,157,138,0.12)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
+              {plan?.source === 'physio' ? 'Physio' : 'Ready'}
+            </span>
+          </div>
+          <div className="p-6 pb-2">
+            <h2 className="mb-1 font-display text-3xl uppercase tracking-tight text-white">Heutige Session</h2>
+            <div className="flex items-center gap-4 text-[10px] uppercase tracking-[0.18em] text-white/40">
+              <div className="flex items-center gap-1">
+                <Clock size={12} />
+                {totalMinutes} Min
+              </div>
+              <div className="flex items-center gap-1">
+                <Zap size={12} />
+                {exercises.length} Übungen
+              </div>
+            </div>
+          </div>
+          <div className="px-6 pb-6 pt-0">
+            <div className="mb-4 overflow-x-auto pb-1">
+              <div className="relative mx-auto flex min-w-max items-center justify-center px-1">
+                <div className="pointer-events-none absolute left-5 right-5 top-1/2 h-px -translate-y-1/2 bg-white/6" />
+                <div className="relative flex items-center gap-2">
+                  {WEEK_DAYS.map(({ day, label }) => {
+                    const planned = plannedDays.includes(day)
+                    const done = completedWeekDays.includes(day)
+                    return (
+                      <div key={label} className="w-11 text-center">
+                        <div
+                          className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-[11px] font-bold"
+                          style={{
+                            borderColor: planned ? 'rgba(42,157,138,0.32)' : 'rgba(255,255,255,0.08)',
+                            background: done ? 'var(--accent)' : planned ? 'rgba(42,157,138,0.12)' : 'rgba(255,255,255,0.04)',
+                            color: done ? '#ffffff' : planned ? 'var(--accent)' : 'rgba(255,255,255,0.4)',
+                          }}
+                        >
+                          {done ? '✓' : label}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6 rounded-xl bg-white/5 p-4">
+              <p className="text-sm leading-relaxed text-white/60">
+                <span className="font-bold text-[var(--accent)]">Entscheidung treffen:</span> {planSummary}
+              </p>
+              <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-white/30">
+                <span>{phaseCounts.warmup} Warm-up</span>
+                <span>{phaseCounts.main} Main</span>
+                <span>{phaseCounts.cooldown} Cool-down</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-white/30">
+                <span>{schedule ? `${schedule.notify_time.slice(0, 5)} Uhr` : 'Ohne Zeit'}</span>
+                <span>{earnedBadgeKeys.length} Badges</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-white/30">
+                {notificationPermission !== 'unsupported' && notificationPermission !== 'granted' ? (
+                  <button onClick={enableNotifications} className="font-bold text-[var(--accent)]">
+                    Reminder aktivieren
+                  </button>
+                ) : notificationPermission === 'granted' ? (
+                  <span className="font-bold text-[var(--accent)]">Reminder aktiv</span>
+                ) : null}
+              </div>
+            </div>
+
             <button
               onClick={() => router.push('/training/session')}
-              className="btn-primary w-full rounded-[12px] py-3 text-base"
+              className="btn-primary group flex w-full items-center justify-center rounded-2xl py-8 font-display text-xl uppercase tracking-[0.14em]"
             >
-              Loslegen
+              Jetzt Momentum nutzen
+              <ArrowRight size={24} className="ml-2 transition-transform group-hover:translate-x-1" />
             </button>
+
             <button
               onClick={() => router.push('/plan')}
-              className="mt-2 w-full py-1 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
+              className="mt-3 w-full text-xs font-semibold uppercase tracking-[0.18em] text-white/40 transition-colors hover:text-white/60"
             >
-              Mehr Informationen zum Plan
+              Mehr zum Plan
             </button>
           </div>
         </div>
-      </section>
+
+        <div className="dashboard-quote mt-12 px-8 text-center xl:col-span-2 xl:mt-0 xl:pt-4">
+          <Quote size={24} className="mx-auto mb-4 text-white/10" />
+          <p className="font-display text-lg uppercase leading-tight tracking-tight text-white/40">
+            "Energie fließt dahin, wo die Aufmerksamkeit hingeht."
+          </p>
+          <div className="mx-auto mt-4 h-1 w-8 rounded-full bg-[rgba(42,157,138,0.2)]" />
+        </div>
+      </div>
     </main>
   )
 }

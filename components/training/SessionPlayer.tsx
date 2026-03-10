@@ -12,7 +12,7 @@ interface Props {
   sessionId?: string
 }
 
-type SessionMode = 'pre' | 'coach' | 'listening'
+type SessionMode = 'coach' | 'listening'
 
 interface RecognitionResultLike {
   0?: { transcript?: string }
@@ -50,9 +50,6 @@ const PHASE_LABELS: Record<string, string> = {
   cooldown: 'COOLDOWN',
 }
 
-const RADIUS = 80
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS
-
 type AgentStatus = 'bereit' | 'hoert_zu' | 'versteht' | 'antwortet'
 
 type VoiceTelemetryEvent =
@@ -68,8 +65,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const [currentIndex, setCurrentIndex] = useState(0)
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const isTestEnv = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)
-  const [mode, setMode] = useState<SessionMode>(isTestEnv ? 'coach' : 'pre')
-  const [hasStarted, setHasStarted] = useState(isTestEnv)
+  const [mode, setMode] = useState<SessionMode>('coach')
   const [isPaused, setIsPaused] = useState(false)
   const [coachTranscript, setCoachTranscript] = useState('')
   const [userTranscript, setUserTranscript] = useState('')
@@ -93,7 +89,6 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const pendingTranscriptRef = useRef<string | null>(null)
   const micModeEnabledRef = useRef(false)
   const userTranscriptRef = useRef('')
-  const skipAutoSpeakRef = useRef(false)
   const activeTurnStartedAtRef = useRef<number | null>(null)
 
   if (exercises.length === 0) {
@@ -110,30 +105,21 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   const current = exercises[currentIndex]
   const totalDuration = current.duration_seconds ?? null
   const completedExercises = useMemo(() => exercises.slice(0, currentIndex + 1), [currentIndex, exercises])
-  const progress = totalDuration && timeLeft !== null
-    ? ((totalDuration - timeLeft) / totalDuration) * 100
-    : null
-  const estimatedExerciseSeconds = useMemo(
-    () => exercises.map(ex => ex.duration_seconds ?? 45),
-    [exercises]
-  )
-  const sessionSecondsLeft = useMemo(() => {
-    const remaining = estimatedExerciseSeconds
-      .slice(currentIndex + 1)
-      .reduce((sum, value) => sum + value, 0)
-    const currentRemaining = timeLeft ?? estimatedExerciseSeconds[currentIndex]
-    return Math.max(0, currentRemaining + remaining)
-  }, [currentIndex, estimatedExerciseSeconds, timeLeft])
-  const ringPercent = Math.round(
-    totalDuration && timeLeft !== null
-      ? ((totalDuration - timeLeft) / totalDuration) * 100
-      : ((currentIndex + 1) / exercises.length) * 100
-  )
-  const nextExercise = exercises[currentIndex + 1]
-  const nextLabel = nextExercise
-    ? `${nextExercise.name} · ${nextExercise.duration_seconds ? `${nextExercise.duration_seconds}s` : `${nextExercise.sets ?? 1}×${nextExercise.repetitions ?? 8}`}`
-    : 'Session abschließen'
-  const isSpeakModeView = isMicModeEnabled || mode === 'listening' || isResponding || agentStatus === 'versteht' || agentStatus === 'antwortet'
+  const displayCoachCopy = useMemo(() => {
+    const source = (coachTranscript || current.voice_script || '').replace(/\s+/g, ' ').trim()
+    if (source.length <= 210) return source
+
+    const sentences = source.match(/[^.!?]+[.!?]?/g) ?? [source]
+    let excerpt = ''
+    for (const sentence of sentences) {
+      const candidate = `${excerpt} ${sentence}`.trim()
+      if (candidate.length > 210) break
+      excerpt = candidate
+    }
+
+    if (excerpt) return excerpt
+    return `${source.slice(0, 207).trimEnd()}...`
+  }, [coachTranscript, current.voice_script])
 
   const trackVoiceEvent = (eventType: VoiceTelemetryEvent, payload: Record<string, unknown> = {}) => {
     void fetch('/api/voice/telemetry', {
@@ -365,13 +351,13 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }, [isMicModeEnabled])
 
   useEffect(() => {
-    if (!hasStarted || isPaused || isResponding || mode === 'listening') return
+    if (isPaused || isResponding || mode === 'listening') return
     if (!isMicModeEnabled) {
       clearListeningResumeTimer()
       return
     }
     scheduleListeningResume(100)
-  }, [hasStarted, isMicModeEnabled, isPaused, isResponding, mode, sttMode])
+  }, [isMicModeEnabled, isPaused, isResponding, mode, sttMode])
 
   useEffect(() => {
     const onAudioStart = () => {
@@ -394,12 +380,6 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }, [sttMode])
 
   useEffect(() => {
-    if (!hasStarted) return
-    if (skipAutoSpeakRef.current) {
-      skipAutoSpeakRef.current = false
-      return
-    }
-
     setMode('coach')
     setIsPaused(false)
     setVoiceHint(undefined)
@@ -417,13 +397,13 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     }
   // speak is intentionally omitted: we only re-run on index change, not when speak prop ref changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, hasStarted, current])
+  }, [currentIndex, current])
 
   useEffect(() => {
-    if (!hasStarted || isPaused || timeLeft === null || timeLeft <= 0) return
+    if (isPaused || timeLeft === null || timeLeft <= 0) return
     const timer = setTimeout(() => setTimeLeft(t => (t ?? 1) - 1), 1000)
     return () => clearTimeout(timer)
-  }, [hasStarted, isPaused, timeLeft])
+  }, [isPaused, timeLeft])
 
   const handleNext = () => {
     if (isLast) {
@@ -434,7 +414,6 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }
 
   const handleRepeat = async () => {
-    if (!hasStarted) return
     setMode('coach')
     setCoachTranscript(current.voice_script)
     await speakWithStatus(current.voice_script)
@@ -463,24 +442,8 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
     onComplete({ transcript, completedExercises: exercises.slice(0, Math.max(1, currentIndex)) })
   }
 
-  const startSession = () => {
-    skipAutoSpeakRef.current = true
-    setHasStarted(true)
-    setMode('coach')
-    setIsPaused(false)
-    setVoiceHint(undefined)
-    setCoachTranscript(current.voice_script)
-    setTranscript(prev => [...prev, { role: 'assistant', content: current.voice_script }])
-    if (current.duration_seconds) {
-      setTimeLeft(current.duration_seconds)
-    } else {
-      setTimeLeft(null)
-    }
-    void speakWithStatus(current.voice_script)
-  }
-
   const startListening = () => {
-    if (!hasStarted || isPaused || isResponding) return
+    if (isPaused || isResponding) return
     if (realtimeOrchestratorRef.current?.isActive || mode === 'listening') return
 
     if (sttMode === 'realtime') {
@@ -583,7 +546,7 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
   }
 
   const toggleMicMode = () => {
-    if (!hasStarted || isPaused) return
+    if (isPaused) return
     if (isMicModeEnabled) {
       micModeEnabledRef.current = false
       setIsMicModeEnabled(false)
@@ -788,467 +751,140 @@ export default function SessionPlayer({ exercises, onComplete, speak, stopSpeaki
       if (mode !== 'listening') {
         setAgentStatus('bereit')
       }
-      if (!turnAborted && micModeEnabledRef.current && !isPaused && hasStarted && sttMode !== 'none') {
+      if (!turnAborted && micModeEnabledRef.current && !isPaused && sttMode !== 'none') {
         scheduleListeningResume(180)
       }
     }
   }
 
   const phaseColor = PHASE_COLORS[current.phase] ?? 'var(--primary)'
-  const progressDots = exercises.map((_, index) => {
-    if (index < currentIndex) return 'done'
-    if (index === currentIndex) return 'current'
-    return 'pending'
-  })
-
   return (
     <div
-      className="relative min-h-screen overflow-hidden"
-      style={{ background: 'var(--bg-dark)' }}
+      className="session-player relative h-[100svh] max-h-[100svh] overflow-hidden"
+      style={{ background: '#020303' }}
     >
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,#0A1714_0%,#0F1F1C_100%)]" />
-      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'linear-gradient(rgba(59,184,154,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(59,184,154,0.04) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-      <div className="relative z-10 flex min-h-screen flex-col">
-        {mode === 'pre' ? (
-          <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-7 text-center text-white">
-            <div className="relative z-10 mb-7 flex h-[26rem] w-[26rem] items-center justify-center">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(59,184,154,0.14),transparent_24%),linear-gradient(180deg,#030404_0%,#010202_100%)]" />
+      <div className="pointer-events-none absolute left-1/2 top-[39%] h-80 w-80 -translate-x-1/2 rounded-full bg-[rgba(69,205,183,0.06)] blur-3xl" />
+      <div className="session-player__divider pointer-events-none absolute inset-x-10 top-[22%] h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.03),transparent)]" />
+      <div className="session-player__shell relative z-10 mx-auto grid h-[100svh] max-h-[100svh] w-full max-w-md overflow-hidden px-7 pb-[calc(1rem+var(--safe-bottom))] pt-[max(1.1rem,var(--safe-top))] text-white">
+        <div className="session-player__topbar mb-[clamp(1rem,3vh,1.6rem)] flex items-center justify-between">
+          <button
+            onClick={handleStop}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white/35 transition-colors hover:text-white"
+            aria-label="Session beenden"
+          >
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-3 px-4">
+            <div className="h-[3px] w-36 rounded-full bg-white/10">
               <div
-                className="absolute left-1/2 top-1/2 h-[16rem] w-[16rem] rounded-full border border-[rgba(59,184,154,0.22)]"
-                style={{ animation: 'ringPulseCentered 3s ease-in-out infinite both' }}
+                className="h-full rounded-full bg-[#D99A4E] transition-all"
+                style={{ width: `${((currentIndex + 1) / exercises.length) * 100}%` }}
               />
-              <div
-                className="absolute left-1/2 top-1/2 h-[21rem] w-[21rem] rounded-full border border-[rgba(59,184,154,0.17)]"
-                style={{ animation: 'ringPulseCentered 3s ease-in-out infinite both', animationDelay: '0.6s' }}
-              />
-              <div
-                className="absolute left-1/2 top-1/2 h-[26rem] w-[26rem] rounded-full border border-[rgba(59,184,154,0.12)]"
-                style={{ animation: 'ringPulseCentered 3s ease-in-out infinite both', animationDelay: '1.2s' }}
-              />
-              <div className="relative flex h-[8.125rem] w-[8.125rem] items-center justify-center rounded-full text-6xl" style={{ background: 'linear-gradient(135deg,#1D7A6A,#3BB89A)', boxShadow: '0 0 60px rgba(59,184,154,0.3)' }}>
-                🩺
-              </div>
             </div>
-            <p className="text-phase mb-3 text-[var(--teal-light)]">Dr. Mia ist bereit</p>
-            <h1 className="font-display text-[2rem] leading-[1.2] text-white">
-              Guten Morgen,<br />
-              <em>du.</em><br />
-              Heute geht&apos;s los.
-            </h1>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-white/65">
-              {exercises.length} Übungen, ruhiger Fokus und ich bleibe die ganze Zeit bei dir. Du kannst jederzeit mit mir sprechen.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              <span className="rounded-full border border-white/12 bg-white/7 px-4 py-2 text-sm text-white/80">🔥 Streak-Bonus</span>
-              <span className="rounded-full border border-white/12 bg-white/7 px-4 py-2 text-sm text-white/80">{exercises.length} Übungen</span>
-              <span className="rounded-full border border-white/12 bg-white/7 px-4 py-2 text-sm text-white/80">⚡ Live Coaching</span>
-            </div>
-            <button
-              onClick={startSession}
-              className="mt-8 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-[var(--teal)] text-2xl text-white shadow-[0_0_0_0_rgba(59,184,154,0.4)]"
-              style={{ animation: 'pulse-glow 2s ease infinite' }}
-              aria-label="Session starten"
-            >
-              <svg viewBox="0 0 24 24" className="h-7 w-7 translate-x-[1px]" fill="currentColor" aria-hidden="true">
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-            </button>
-            <p className="mt-3 text-sm text-white/45">Tippen zum Starten, dann Handy weglegen</p>
-          </div>
-        ) : (
-          <>
-        <div
-          className="px-6 pb-7 pt-[max(1rem,var(--safe-top))] text-white"
-          style={{
-            background: isSpeakModeView
-              ? 'linear-gradient(180deg, #1A0E0A 0%, #1A1209 100%)'
-              : 'linear-gradient(180deg, #0A1714 0%, #0F1F1C 100%)',
-          }}
-        >
-          <div className="mb-5 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex gap-1">
-                {progressDots.map((state, index) => (
-                  <div
-                    key={index}
-                    className="h-1.5 rounded-full transition-all"
-                    style={{
-                      width: state === 'current' ? 18 : 6,
-                      background: state === 'done' ? 'var(--teal-mid)' : state === 'current' ? '#fff' : 'rgba(255,255,255,0.2)',
-                    }}
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-white/55">{currentIndex + 1}/{exercises.length}</span>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-sm font-bold tabular-nums">
-              {String(Math.floor(sessionSecondsLeft / 60)).padStart(2, '0')}:{String(sessionSecondsLeft % 60).padStart(2, '0')}
-            </div>
-          </div>
-          {isMicModeEnabled && (
-            <div className="mb-3 flex">
-              <button
-                onClick={exitSpeakMode}
-                className="rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/85"
-              >
-                ← Zurück
-              </button>
-            </div>
-          )}
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-white/60">Live-Status</span>
-            <span className="rounded-full border border-white/15 bg-white/8 px-3 py-1 text-xs font-semibold text-white/85">
-              {agentStatus === 'hoert_zu' && 'Hört zu'}
-              {agentStatus === 'versteht' && 'Versteht…'}
-              {agentStatus === 'antwortet' && 'Antwortet…'}
-              {agentStatus === 'bereit' && 'Bereit'}
+            <span className="text-[11px] uppercase tracking-[0.24em] text-white/50">
+              {currentIndex + 1} / {exercises.length}
             </span>
           </div>
-
-          <div className="relative mb-4 flex justify-center">
-            <div className="relative h-24 w-24">
-              <div
-                className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 rounded-full border-2"
-                style={{
-                  borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)',
-                  animation: 'waveOutCentered 1.8s ease-out infinite',
-                  animationDelay: '0s',
-                  transform: 'translate(-50%, -50%)',
-                }}
-              />
-              <div
-                className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 rounded-full border-2"
-                style={{
-                  borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)',
-                  animation: 'waveOutCentered 1.8s ease-out infinite',
-                  animationDelay: '0.6s',
-                  transform: 'translate(-50%, -50%)',
-                }}
-              />
-              <div
-                className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 rounded-full border-2"
-                style={{
-                  borderColor: mode === 'listening' ? 'var(--peach)' : 'var(--teal-mid)',
-                  animation: 'waveOutCentered 1.8s ease-out infinite',
-                  animationDelay: '1.2s',
-                  transform: 'translate(-50%, -50%)',
-                }}
-              />
-              <div
-                className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full text-5xl"
-                style={{
-                  background: mode === 'listening'
-                    ? 'linear-gradient(135deg,#7B1F10,#F0724A,#F5A26A)'
-                    : 'linear-gradient(135deg,#1D7A6A,#3BB89A,#6FD4C0)',
-                  animation: 'floatBob 4s ease-in-out infinite',
-                  boxShadow: mode === 'listening'
-                    ? '0 0 40px rgba(240,114,74,0.45)'
-                    : '0 0 40px rgba(59,184,154,0.4)',
-                }}
-              >
-                🩺
-              </div>
-            </div>
-          </div>
-
-          {isSpeakModeView ? (
-            <>
-              <div className="mb-4 flex items-center justify-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-[var(--peach)] animate-pulse" />
-                <span className="text-xs font-bold uppercase tracking-[0.08em] text-[rgba(240,114,74,0.9)]">
-                  {agentStatus === 'hoert_zu' && 'Dr. Mia hört zu'}
-                  {agentStatus === 'versteht' && 'Dr. Mia verarbeitet'}
-                  {agentStatus === 'antwortet' && 'Dr. Mia antwortet'}
-                  {agentStatus === 'bereit' && 'Speak-Modus aktiv'}
-                </span>
-              </div>
-              <div className="rounded-2xl border border-[rgba(240,114,74,0.2)] bg-[rgba(240,114,74,0.08)] p-4">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(240,114,74,0.65)]">Du sagst</p>
-                <p className="text-[15px] leading-7 text-white/90">
-                  {userTranscript || (agentStatus === 'hoert_zu' ? 'Ich höre zu…' : 'Bereit für deinen nächsten Satz.')}
-                </p>
-              </div>
-              <div className="mb-3 mt-3 flex h-10 items-end justify-center gap-[3px]">
-                {Array.from({ length: 12 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="w-[3px] rounded bg-[var(--peach)]"
-                    style={{
-                      height: `${[8, 20, 14, 28, 10, 24, 16, 30, 12, 22, 8, 18][index]}px`,
-                      animation: `pulse-glow ${0.35 + (index % 3) * 0.1}s ease-in-out ${index * 0.08}s infinite alternate`,
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="rounded-xl border border-white/8 bg-white/4 p-3">
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(168,240,224,0.4)]">Dr. Mia sagte</p>
-                <p className="text-sm italic text-white/55">„{coachTranscript || current.voice_script}"</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(168,240,224,0.6)]">Dr. Mia spricht</p>
-                <p className="min-h-12 text-[15px] leading-7 text-white/90 italic">
-                  {coachTranscript || current.voice_script}
-                </p>
-              </div>
-
-              <div className="mt-3 flex items-center gap-2">
-                <div
-                  className="flex min-h-[2.75rem] flex-1 items-center gap-2 rounded-full border px-3"
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    borderColor: 'rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <input
-                    value={typedMessage}
-                    onChange={event => {
-                      const next = event.target.value
-                      setTypedMessage(next)
-                      if (pendingTranscriptRef.current !== null) {
-                        pendingTranscriptRef.current = null
-                        clearAutoSendTimer()
-                        setVoiceHint('Auto-Senden pausiert. Prüfe den Text und sende manuell.')
-                      }
-                    }}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        void sendUserMessage(typedMessage)
-                      }
-                    }}
-                    placeholder="Sag etwas oder tippe hier…"
-                    className="voice-input h-10 flex-1 text-sm focus:outline-none"
-                    aria-label="Nachricht an Dr. Mia"
-                    style={{
-                      background: 'transparent',
-                      color: 'white',
-                      border: '0',
-                      boxShadow: 'none',
-                      appearance: 'none',
-                      WebkitAppearance: 'none',
-                      padding: 0,
-                    }}
-                  />
-                  <div className="flex items-center gap-[2px]">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <div
-                        key={index}
-                        className="w-[2px] rounded-full"
-                        style={{
-                          height: `${[4, 10, 7, 12, 5][index]}px`,
-                          background: 'rgba(255,255,255,0.22)',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <button
-                  onClick={toggleMicMode}
-                  disabled={!isMicAvailable}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-white disabled:opacity-50"
-                  style={{
-                    background: isMicModeEnabled
-                      ? 'linear-gradient(135deg,#7B1F10,#F0724A,#F5A26A)'
-                      : isMicAvailable
-                        ? 'var(--peach)'
-                        : 'rgba(255,255,255,0.18)',
-                    boxShadow: isMicModeEnabled
-                      ? '0 0 0 4px rgba(240,114,74,0.2), 0 4px 14px rgba(240,114,74,0.45)'
-                      : isMicAvailable
-                        ? '0 4px 12px rgba(240,114,74,0.35)'
-                        : 'none',
-                  }}
-                  aria-label={isMicModeEnabled ? 'Mikrofonmodus deaktivieren' : 'Mikrofonmodus aktivieren'}
-                  title={
-                    isMicModeEnabled
-                      ? 'Mikrofonmodus aktiv (tippen zum Ausschalten)'
-                      : sttMode === 'realtime'
-                        ? 'Mikrofonmodus aktivieren (Realtime Voice)'
-                        : 'Mikrofonmodus aktivieren (Browser-Spracherkennung)'
-                  }
-                >
-                  🎙
-                </button>
-                <button
-                  onClick={() => {
-                    pendingTranscriptRef.current = null
-                    clearAutoSendTimer()
-                    void sendUserMessage(typedMessage)
-                  }}
-                  disabled={isResponding || isPaused || !typedMessage.trim()}
-                  className="rounded-full border px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'rgba(29,122,106,0.35)', borderColor: 'rgba(255,255,255,0.08)' }}
-                >
-                  Senden
-                </button>
-              </div>
-              {voiceHint && (
-                <p className="mt-2 px-2 text-xs text-white/55">{voiceHint}</p>
-              )}
-              <p className="mt-1 px-2 text-[10px] uppercase tracking-[0.08em] text-white/40">
-                Voice-Modus: {sttMode === 'realtime' ? 'Realtime' : sttMode === 'browser' ? 'Browser' : 'Text'}
-              </p>
-              <div className="mt-2 rounded-xl border border-white/8 bg-white/4 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => setIsTranscriptExpanded(prev => !prev)}
-                    className="text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(168,240,224,0.5)]"
-                  >
-                    Live-Transkript {isTranscriptExpanded ? 'einklappen' : 'aufklappen'}
-                  </button>
-                  <button
-                    onClick={() => void copyTranscript()}
-                    disabled={transcript.length === 0}
-                    className="rounded-md p-1 text-white/70 disabled:opacity-30"
-                    aria-label="Transkript kopieren"
-                    title="Transkript kopieren"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <rect x="9" y="9" width="11" height="11" rx="2" />
-                      <rect x="4" y="4" width="11" height="11" rx="2" />
-                    </svg>
-                  </button>
-                </div>
-                {isTranscriptExpanded ? (
-                  <div className="max-h-28 space-y-1.5 overflow-y-auto pr-1">
-                    {transcript.slice(-8).map((message, index) => (
-                      <div key={`${message.role}-${index}-${message.content.slice(0, 12)}`} className="text-xs leading-5 text-white/80">
-                        <span className="font-semibold text-white/60">{message.role === 'assistant' ? 'Dr. Mia:' : 'Du:'}</span>{' '}
-                        {message.content}
-                        {message.role === 'user' && (
-                          <button
-                            onClick={() => setTypedMessage(message.content)}
-                            className="ml-2 text-[10px] font-semibold text-[var(--teal-light)]"
-                          >
-                            bearbeiten
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {transcript.length === 0 && (
-                      <div className="text-xs text-white/45">Noch kein Gespräch. Starte mit Sprache oder Text.</div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-xs text-white/50">
-                    {transcript.length === 0
-                      ? 'Noch kein Gespräch. Starte mit Sprache oder Text.'
-                      : `${transcript.length} Nachrichten. Tippen zum Anzeigen.`}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+          <div className="h-9 w-9" />
         </div>
 
-        <div className="mt-auto rounded-t-[28px] bg-[var(--background)] px-6 pb-[calc(1.25rem+var(--safe-bottom))] pt-5 shadow-[0_-8px_32px_rgba(0,0,0,0.3)]">
-          <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[var(--border)]" />
+        <div className="session-player__hero flex flex-col items-center text-center">
+          <div className="session-player__hero-inner w-full">
+            <p className="text-phase mb-3 text-center" style={{ color: phaseColor, letterSpacing: '0.38em' }}>
+              {PHASE_LABELS[current.phase] ?? current.phase}
+            </p>
+            <h1 className="session-player__title w-full px-2 text-center font-display text-[clamp(3.8rem,11vw,5.4rem)] uppercase leading-[0.9] tracking-[0.01em] text-white">
+              {current.name}
+            </h1>
+          </div>
+        </div>
 
-          {isResponding && (
-            <div className="mb-4 flex items-center gap-3 rounded-xl border border-[rgba(240,114,74,0.15)] bg-[var(--peach-light)] p-3">
-              <span className="text-xl">🩺</span>
-              <div>
-                <div className="text-xs font-bold text-[var(--peach)]">Dr. Mia antwortet gleich…</div>
-                <div className="text-xs text-[var(--text-muted)]">Verarbeite deine Frage</div>
+        <div className="session-player__body overflow-hidden">
+          <div className="session-player__timer relative flex h-[min(17.75rem,34vh)] w-[min(17.75rem,34vh)] min-h-[13.5rem] min-w-[13.5rem] items-center justify-center rounded-full border-[8px] border-[rgba(110,235,220,0.86)] shadow-[0_0_48px_rgba(66,209,192,0.12)]">
+            <div className="absolute inset-5 rounded-full bg-[radial-gradient(circle,rgba(39,116,104,0.16),transparent_68%)]" />
+            {totalDuration ? (
+              <div className="relative z-10 flex flex-col items-center justify-center">
+                <span className="font-display text-[clamp(5rem,16vh,8rem)] leading-[0.88] tracking-[0.01em] text-white">
+                  {timeLeft ?? totalDuration}
+                </span>
+                <span className="mt-2 text-[10px] uppercase tracking-[0.28em] text-white/26">Sekunden</span>
               </div>
-              <div className="ml-auto flex gap-1">
-                <div className="h-1.5 w-1.5 rounded-full bg-[var(--peach)] animate-bounce [animation-delay:0ms]" />
-                <div className="h-1.5 w-1.5 rounded-full bg-[var(--peach)] animate-bounce [animation-delay:120ms]" />
-                <div className="h-1.5 w-1.5 rounded-full bg-[var(--peach)] animate-bounce [animation-delay:220ms]" />
+            ) : (
+              <div className="relative z-10 flex flex-col items-center justify-center">
+                <span className="font-display text-[clamp(5rem,16vh,8rem)] leading-[0.88] tracking-[0.01em] text-white">
+                  {current.repetitions ?? 8}
+                </span>
+                <span className="mt-2 text-[10px] uppercase tracking-[0.28em] text-white/26">Wiederholungen</span>
               </div>
-            </div>
-          )}
-
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--teal)]">
-            {isPaused ? 'Pausiert' : 'Jetzt'} · Übung {currentIndex + 1} von {exercises.length}
-          </p>
-          <h2 className="font-display text-[1.65rem] leading-tight text-[var(--text-primary)]">{current.name}</h2>
-          <p className="mb-4 mt-2 rounded-[12px] bg-[var(--sand)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)]">
-            {current.description}
-          </p>
-
-          <div className="mb-4 grid grid-cols-3 gap-2.5">
-            <div className="rounded-[12px] border p-3 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]" style={{ borderColor: timeLeft !== null ? 'var(--teal)' : 'var(--border)', background: timeLeft !== null ? 'rgba(29,122,106,0.04)' : 'var(--card)' }}>
-              <div className="text-[1.6rem] font-extrabold leading-none text-[var(--teal)] tabular-nums">{timeLeft ?? (current.duration_seconds ?? 0)}</div>
-              <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">Sekunden</div>
-            </div>
-            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-              <div className="text-[1.6rem] font-extrabold leading-none text-[var(--text-primary)]">
-                {current.sets && current.repetitions ? `${current.sets}×${current.repetitions}` : '1×8'}
-              </div>
-              <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">Wiederholungen</div>
-            </div>
-            <div className="rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-3 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-              <div className="text-[1.6rem] font-extrabold leading-none text-[var(--text-primary)]">
-                {current.duration_seconds ? `${current.duration_seconds}s` : '45s'}
-              </div>
-              <div className="mt-1 text-[11px] font-semibold text-[var(--text-muted)]">Gesamt</div>
-            </div>
+            )}
           </div>
 
-          <div className="mb-4 flex items-center justify-center gap-4">
-            <div className="relative flex h-[88px] w-[88px] items-center justify-center">
-              <svg width="88" height="88" viewBox="0 0 88 88" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="44" cy="44" r="38" fill="none" stroke="var(--border)" strokeWidth="6" />
-                <circle
-                  cx="44"
-                  cy="44"
-                  r="38"
-                  fill="none"
-                  stroke={phaseColor}
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                  strokeDasharray={238.8}
-                  strokeDashoffset={238.8 - (238.8 * ringPercent) / 100}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-lg font-extrabold text-[var(--teal)]">{ringPercent}%</span>
-                <span className="text-[11px] text-[var(--text-muted)]">erledigt</span>
-              </div>
-            </div>
-            <div className="flex-1 rounded-[12px] bg-[var(--sand)] px-4 py-3">
-              <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">Als nächstes</div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">{nextLabel}</div>
-            </div>
-          </div>
-
-          <div className="mb-3 grid grid-cols-3 gap-2">
-            <button
-              onClick={() => void handleRepeat()}
-              disabled={isResponding}
-              className="rounded-[12px] border border-[var(--border)] bg-[var(--sand)] px-3 py-3 text-sm font-semibold text-[var(--text-secondary)] disabled:opacity-50"
-            >
-              Nochmal
-            </button>
-            <button
-              onClick={handlePauseToggle}
-              disabled={isResponding}
-              className="rounded-[12px] border px-3 py-3 text-sm font-semibold disabled:opacity-50"
+          <div className="session-player__copy-wrap flex min-h-0 w-full flex-col items-center justify-start overflow-hidden px-3">
+            <p
+              className="session-player__copy max-w-[18.75rem] text-center text-[clamp(0.95rem,3.05vw,1.35rem)] italic leading-[1.48] text-white/56"
               style={{
-                borderColor: isPaused ? 'var(--teal)' : 'var(--border)',
-                color: isPaused ? 'var(--teal)' : 'var(--text-secondary)',
-                background: isPaused ? 'rgba(29,122,106,0.05)' : 'var(--sand)',
+                display: '-webkit-box',
+                WebkitLineClamp: 6,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
               }}
             >
-              {isPaused ? 'Fortsetzen' : 'Pause'}
-            </button>
-            <button
-              onClick={handleStop}
-              className="rounded-[12px] border border-[rgba(240,114,74,0.2)] bg-[rgba(240,114,74,0.05)] px-3 py-3 text-sm font-semibold text-[var(--peach)]"
-            >
-              Stop
-            </button>
+              "{displayCoachCopy}"
+            </p>
+
+            {voiceHint && (
+              <p className="session-player__hint mt-4 max-w-[18rem] px-4 text-center text-[10px] uppercase tracking-[0.2em] text-white/22">{voiceHint}</p>
+            )}
           </div>
 
-          <button onClick={handleNext} className="btn-primary w-full rounded-[14px] py-3.5 text-lg">
-            {isLast ? 'Session abschließen' : 'Weiter'}
-          </button>
+          <div className="session-player__controls w-full pb-2 pt-[clamp(0.5rem,1.8vh,1rem)]">
+            <div className="session-player__controls-grid grid grid-cols-3 items-center gap-6">
+              <button
+                onClick={() => void handleRepeat()}
+                disabled={isResponding}
+                className="mx-auto flex h-[4.4rem] w-[4.4rem] items-center justify-center rounded-full border border-white/[0.04] bg-white/[0.05] text-white/34 transition-colors hover:text-white disabled:opacity-50"
+                aria-label="Nochmal"
+              >
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.69" />
+                  <path d="M4 4v5h5" />
+                </svg>
+              </button>
+
+              <button
+                onClick={handlePauseToggle}
+                disabled={isResponding}
+                className="mx-auto flex h-[6.25rem] w-[6.25rem] items-center justify-center rounded-full bg-[#8FE8D9] text-white shadow-[0_0_72px_rgba(99,205,185,0.2)] disabled:opacity-50"
+                aria-label={isPaused ? 'Fortsetzen' : 'Pause'}
+              >
+                {isPaused ? (
+                  <svg viewBox="0 0 24 24" className="h-10 w-10 translate-x-[1px]" fill="currentColor" aria-hidden="true">
+                    <polygon points="5,3 19,12 5,21" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor" aria-hidden="true">
+                    <rect x="6" y="4" width="4" height="16" rx="1.5" />
+                    <rect x="14" y="4" width="4" height="16" rx="1.5" />
+                  </svg>
+                )}
+              </button>
+
+              <button
+                onClick={handleNext}
+                className="mx-auto flex h-[4.4rem] w-[4.4rem] items-center justify-center rounded-full border border-white/[0.04] bg-white/[0.05] text-white/34 transition-colors hover:text-white"
+                aria-label={isLast ? 'Session abschließen' : 'Weiter'}
+              >
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M5 5v14" />
+                  <path d="M9 7l8 5-8 5V7z" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
-          </>
-        )}
       </div>
     </div>
   )

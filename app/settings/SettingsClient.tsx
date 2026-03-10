@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
+import { Calendar, Mail, ShieldPlus, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { useSoftNavigation } from '@/lib/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Schedule } from '@/lib/types'
 
@@ -43,6 +45,7 @@ export default function SettingsClient({
   isSelfCreatedPlan,
 }: Props) {
   const supabase = createClient()
+  const router = useSoftNavigation()
 
   const [selectedDays, setSelectedDays] = useState<number[]>(initialSchedule?.days ?? [1, 3, 5])
   const [notifyTime, setNotifyTime] = useState(normalizeTime(initialSchedule?.notify_time))
@@ -154,135 +157,163 @@ export default function SettingsClient({
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-        <h2 className="mb-1 text-lg font-bold text-[var(--text-primary)]">Trainingsrhythmus</h2>
-        <p className="mb-4 text-sm text-[var(--text-secondary)]">
-          Lege fest, wann du trainierst. 5 Minuten vorher kann eine Erinnerung erscheinen.
-        </p>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          {WEEK_DAYS.map(({ day, label }) => {
-            const active = selectedDays.includes(day)
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggleDay(day)}
-                className="rounded-full border px-4 py-2 text-sm font-semibold transition-colors"
-                style={{
-                  borderColor: active ? 'var(--teal)' : 'var(--border)',
-                  background: active ? 'var(--teal-light)' : 'var(--sand)',
-                  color: active ? 'var(--teal)' : 'var(--text-secondary)',
-                }}
-              >
-                {label}
-              </button>
-            )
-          })}
+    <div className="space-y-8 md:grid md:grid-cols-2 md:gap-8 md:space-y-0">
+      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
+        <div className="p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">Trainingsrhythmus</h2>
         </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="notifyTime" className="mb-1 block text-xs font-semibold text-[var(--text-secondary)]">
-              Uhrzeit
-            </label>
-            <Input id="notifyTime" type="time" value={notifyTime} onChange={event => setNotifyTime(event.target.value)} />
+        <div className="px-6 pb-6 pt-0">
+          <div className="mb-6 flex flex-wrap gap-2">
+            {WEEK_DAYS.map(({ day, label }) => {
+              const active = selectedDays.includes(day)
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDay(day)}
+                  className={`flex h-12 w-12 items-center justify-center rounded-full border text-xs font-semibold transition-all ${
+                    active ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)] text-[var(--accent)]' : 'border-white/10 text-white/40'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
-          <div>
-            <label htmlFor="timezone" className="mb-1 block text-xs font-semibold text-[var(--text-secondary)]">
-              Zeitzone
-            </label>
-            <Input id="timezone" value={timezone} onChange={event => setTimezone(event.target.value)} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="notifyTime" className="text-[10px] uppercase tracking-[0.18em] text-white/40">
+                Uhrzeit
+              </label>
+              <Input id="notifyTime" type="time" value={notifyTime} onChange={event => setNotifyTime(event.target.value)} className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="timezone" className="text-[10px] uppercase tracking-[0.18em] text-white/40">
+                Zeitzone
+              </label>
+              <Input id="timezone" value={timezone} onChange={event => setTimezone(event.target.value)} className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+            </div>
           </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={saveSchedule}
-          disabled={scheduleLoading}
-          className="btn-primary mt-4 w-full rounded-xl py-3 text-sm disabled:opacity-60"
-        >
-          {scheduleLoading ? 'Speichern...' : 'Rhythmus speichern'}
-        </button>
-        {scheduleMessage && (
-          <p className="mt-2 text-xs text-[var(--text-secondary)]">{scheduleMessage}</p>
-        )}
-      </section>
-
-      <section className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-        <h2 className="mb-3 text-lg font-bold text-[var(--text-primary)]">Konto</h2>
-
-        <div className="space-y-2">
-          <label htmlFor="name" className="block text-xs font-semibold text-[var(--text-secondary)]">Name</label>
-          <Input id="name" value={name} onChange={event => setName(event.target.value)} placeholder="Dein Name" />
           <button
             type="button"
-            onClick={saveName}
-            disabled={profileLoading}
-            className="rounded-xl border border-[var(--border)] bg-[var(--sand)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] disabled:opacity-60"
+            onClick={saveSchedule}
+            disabled={scheduleLoading}
+            className="mt-6 w-full rounded-xl bg-[var(--secondary)] py-5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
           >
-            {profileLoading ? 'Speichern...' : 'Name speichern'}
+            {scheduleLoading ? 'Speichern...' : 'Rhythmus speichern'}
           </button>
-          {profileMessage && <p className="text-xs text-[var(--text-secondary)]">{profileMessage}</p>}
-        </div>
-
-        <div className="mt-5 space-y-2">
-          <label htmlFor="email" className="block text-xs font-semibold text-[var(--text-secondary)]">E-Mail</label>
-          <Input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="du@email.de" />
-          <button
-            type="button"
-            onClick={saveEmail}
-            disabled={emailLoading}
-            className="rounded-xl border border-[var(--border)] bg-[var(--sand)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] disabled:opacity-60"
-          >
-            {emailLoading ? 'Speichern...' : 'E-Mail ändern'}
-          </button>
-          {emailMessage && <p className="text-xs text-[var(--text-secondary)]">{emailMessage}</p>}
-        </div>
-
-        <div className="mt-5 space-y-2">
-          <label htmlFor="password" className="block text-xs font-semibold text-[var(--text-secondary)]">Neues Passwort</label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            value={newPassword}
-            onChange={event => setNewPassword(event.target.value)}
-            placeholder="Mindestens 8 Zeichen"
-          />
-          <Input
-            id="passwordConfirm"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={event => setConfirmPassword(event.target.value)}
-            placeholder="Passwort wiederholen"
-          />
-          <button
-            type="button"
-            onClick={savePassword}
-            disabled={passwordLoading}
-            className="rounded-xl border border-[var(--border)] bg-[var(--sand)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] disabled:opacity-60"
-          >
-            {passwordLoading ? 'Speichern...' : 'Passwort ändern'}
-          </button>
-          {passwordMessage && <p className="text-xs text-[var(--text-secondary)]">{passwordMessage}</p>}
+          {scheduleMessage && <p className="mt-3 text-xs text-white/40">{scheduleMessage}</p>}
         </div>
       </section>
 
-      <section className="rounded-[20px] border border-[var(--border)] bg-white p-5 shadow-[var(--shadow-sm)]">
-        <h2 className="mb-2 text-lg font-bold text-[var(--text-primary)]">Zugeordneter Physiotherapeut</h2>
+      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
+        <div className="p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">Erfolge</h2>
+        </div>
+        <div className="px-6 pb-6 pt-0">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { icon: Calendar, label: 'Rhythmus' },
+              { icon: ShieldPlus, label: 'Routine' },
+              { icon: User, label: 'Coach' },
+              { icon: Mail, label: 'Profil' },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex flex-col items-center gap-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/5 bg-white/5 text-[var(--accent)]">
+                  <Icon size={18} />
+                </div>
+                <span className="text-center text-[8px] uppercase leading-tight tracking-[0.16em] text-white/40">{label}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push('/badges')}
+            className="mt-6 w-full rounded-xl border border-white/5 bg-white/5 py-5 text-sm font-semibold text-white transition-colors hover:bg-white/8"
+          >
+            Badges ansehen
+          </button>
+        </div>
+      </section>
+
+      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
+        <div className="p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">Konto</h2>
+        </div>
+        <div className="space-y-5 px-6 pb-6 pt-0">
+          <div className="space-y-2">
+            <label htmlFor="name" className="text-[10px] uppercase tracking-[0.18em] text-white/40">Name</label>
+            <Input id="name" value={name} onChange={event => setName(event.target.value)} placeholder="Dein Name" className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+            <button
+              type="button"
+              onClick={saveName}
+              disabled={profileLoading}
+              className="w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+            >
+              {profileLoading ? 'Speichern...' : 'Name speichern'}
+            </button>
+            {profileMessage && <p className="text-xs text-white/40">{profileMessage}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-[10px] uppercase tracking-[0.18em] text-white/40">Email</label>
+            <Input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="du@email.de" className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+            <button
+              type="button"
+              onClick={saveEmail}
+              disabled={emailLoading}
+              className="w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+            >
+              {emailLoading ? 'Speichern...' : 'E-Mail ändern'}
+            </button>
+            {emailMessage && <p className="text-xs text-white/40">{emailMessage}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-[10px] uppercase tracking-[0.18em] text-white/40">Neues Passwort</label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={event => setNewPassword(event.target.value)}
+              placeholder="Mindestens 8 Zeichen"
+              className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto"
+            />
+            <Input
+              id="passwordConfirm"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={event => setConfirmPassword(event.target.value)}
+              placeholder="Passwort wiederholen"
+              className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto"
+            />
+            <button
+              type="button"
+              onClick={savePassword}
+              disabled={passwordLoading}
+              className="w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+            >
+              {passwordLoading ? 'Speichern...' : 'Passwort ändern'}
+            </button>
+            {passwordMessage && <p className="text-xs text-white/40">{passwordMessage}</p>}
+          </div>
+        </div>
+      </section>
+
+      <section className="glass-card rounded-[28px] border-white/5 p-6 md:self-start">
+        <h2 className="mb-2 font-display text-xl uppercase tracking-tight text-white">Physiotherapie</h2>
         {physioInfo ? (
-          <div className="space-y-2 text-sm text-[var(--text-primary)]">
-            <p><span className="font-semibold">ID:</span> {physioInfo.id}</p>
-            <p><span className="font-semibold">Name:</span> {physioInfo.name ?? 'Nicht hinterlegt'}</p>
-            <p><span className="font-semibold">Anschrift:</span> {physioInfo.address ?? 'Nicht hinterlegt'}</p>
+          <div className="space-y-2 text-sm text-white/75">
+            <p><span className="font-semibold text-white">ID:</span> {physioInfo.id}</p>
+            <p><span className="font-semibold text-white">Name:</span> {physioInfo.name ?? 'Nicht hinterlegt'}</p>
+            <p><span className="font-semibold text-white">Anschrift:</span> {physioInfo.address ?? 'Nicht hinterlegt'}</p>
           </div>
         ) : (
-          <p className="text-sm text-[var(--text-secondary)]">
+          <p className="text-sm text-white/40">
             {isSelfCreatedPlan
-              ? 'Du hast deinen Plan selbst erstellt (AI-gestützt).'
+              ? 'Du hast deinen Plan selbst erstellt und nutzt aktuell keinen zugeordneten Physio.'
               : 'Derzeit ist kein Physiotherapeut zugeordnet.'}
           </p>
         )}

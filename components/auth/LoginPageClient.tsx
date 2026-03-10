@@ -29,27 +29,28 @@ export default function LoginPageClient() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 60% 40% at 50% 30%, rgba(240,160,75,0.06) 0%, transparent 60%)' }}
-      />
-      <div className="relative z-10 w-full max-w-sm space-y-8 animate-slide-up">
-        <div className="text-center">
+    <main className="vital-gradient relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6">
+      <div className="relative z-10 w-full max-w-sm space-y-8 animate-slide-up md:grid md:max-w-4xl md:grid-cols-[minmax(0,0.95fr)_minmax(22rem,0.8fr)] md:items-center md:gap-10 md:space-y-0 lg:max-w-5xl lg:gap-12">
+        <div className="text-center md:text-left">
           <div className="text-phase mb-2" style={{ color: 'var(--primary)', letterSpacing: '0.2em', fontSize: '0.7rem' }}>
             WILLKOMMEN ZURUECK
           </div>
-          <h1 className="font-display uppercase" style={{ fontSize: 'clamp(3rem, 15vw, 5rem)', lineHeight: 0.9 }}>
+          <h1 className="font-display uppercase" style={{ fontSize: 'clamp(3.4rem, 18vw, 5.6rem)', lineHeight: 0.88 }}>
             Physio<span style={{ color: 'var(--primary)' }}>Bot</span>
           </h1>
+          <p className="mx-auto mt-4 max-w-md text-sm leading-7 text-white/55 md:mx-0">
+            Desktop und Landscape bekommen mehr Raum. Dein Einstieg bleibt schnell, aber nicht mehr auf Mobile-Breite fixiert.
+          </p>
         </div>
-        <AuthForm mode="login" onSubmit={handleLogin} isLoading={isLoading} error={error} />
-        <p className="text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Noch kein Account?{' '}
-          <TransitionLink href="/auth/register" className="underline underline-offset-4 transition-colors" style={{ color: 'var(--primary)' }}>
-            Registrieren
-          </TransitionLink>
-        </p>
+        <div className="space-y-8">
+          <AuthForm mode="login" onSubmit={handleLogin} isLoading={isLoading} error={error} />
+          <p className="text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Noch kein Account?{' '}
+            <TransitionLink href="/auth/register" className="underline underline-offset-4 transition-colors" style={{ color: 'var(--primary)' }}>
+              Registrieren
+            </TransitionLink>
+          </p>
+        </div>
       </div>
     </main>
   )

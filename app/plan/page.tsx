@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import TransitionLink from '@/components/navigation/TransitionLink'
+import PlanTabs from '@/components/training/PlanTabs'
 import { createClient } from '@/lib/supabase/server'
 import type { Exercise } from '@/lib/types'
 
@@ -12,12 +13,6 @@ interface ProfileWithPlan {
     source: 'ai' | 'physio'
   } | null
 }
-
-const PHASES = [
-  { key: 'warmup', label: 'Aufwärmen', emoji: '🔥' },
-  { key: 'main', label: 'Hauptteil', emoji: '⚡' },
-  { key: 'cooldown', label: 'Cooldown', emoji: '🌿' },
-] as const
 
 export default async function PlanPage() {
   const supabase = await createClient()
@@ -41,47 +36,25 @@ export default async function PlanPage() {
   ))
 
   return (
-    <main className="mx-auto min-h-screen max-w-[430px] px-5 pb-10 pt-8">
-      <div className="mb-6">
-        <TransitionLink href="/dashboard" className="mb-4 inline-flex text-sm font-semibold text-[var(--teal)]">
+    <main className="vital-gradient min-h-screen pb-12 lg:min-h-full">
+      <div className="px-6 pt-12 md:px-8 md:pb-8 lg:px-10 lg:pb-10 xl:px-12 xl:pt-14">
+        <TransitionLink href="/dashboard" className="mb-8 inline-flex items-center gap-2 p-0 text-sm font-semibold text-[var(--accent)] transition-colors hover:text-[color:rgba(42,157,138,0.8)]">
           ← Zurück zum Dashboard
         </TransitionLink>
-        <div className="text-phase mb-2 text-[var(--teal)]">Aktiver Plan</div>
-        <h1 className="font-display text-5xl leading-none text-[var(--foreground)]">Übungsdetails</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-          {exercises.length} Übungen · ca. {totalMinutes} Minuten · erstellt {new Date(plan.created_at).toLocaleDateString('de-DE')}
-        </p>
-      </div>
+        <div className="mb-12 md:flex md:items-end md:justify-between md:gap-8">
+          <div>
+            <span className="mb-2 block text-xs font-medium uppercase tracking-[0.28em] text-[rgba(42,157,138,0.6)]">Aktiver Plan</span>
+            <h1 className="font-display text-6xl uppercase tracking-tight text-white">Übungsdetails</h1>
+            <p className="mt-2 text-sm text-white/40">
+              {exercises.length} Übungen · ca. {totalMinutes} Minuten · erstellt {new Date(plan.created_at).toLocaleDateString('de-DE')}
+            </p>
+          </div>
+          <div className="mt-5 rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.18em] text-white/45 md:mt-0 md:min-w-[16rem] md:text-right">
+            {plan.source === 'physio' ? 'Von deinem Physio erstellt' : 'Von PhysioCoach generiert'}
+          </div>
+        </div>
 
-      <div className="space-y-5">
-        {PHASES.map(phase => {
-          const phaseExercises = exercises.filter(exercise => exercise.phase === phase.key)
-          if (phaseExercises.length === 0) return null
-          return (
-            <section key={phase.key} className="rounded-[20px] border border-[var(--border)] bg-white p-4 shadow-[var(--shadow-sm)]">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{phase.emoji}</span>
-                  <h2 className="text-lg font-bold text-[var(--text-primary)]">{phase.label}</h2>
-                </div>
-                <span className="text-xs text-[var(--text-muted)]">{phaseExercises.length} Übungen</span>
-              </div>
-              <ul className="space-y-3">
-                {phaseExercises.map((exercise, index) => (
-                  <li key={`${phase.key}-${index}`} className="rounded-[14px] border border-[var(--border)] bg-[var(--card)] px-4 py-3">
-                    <div className="mb-1 flex items-start justify-between gap-3">
-                      <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{exercise.name}</h3>
-                      <span className="rounded-full bg-[var(--teal-light)] px-2 py-0.5 text-xs font-bold text-[var(--teal)]">
-                        {exercise.duration_seconds ? `${exercise.duration_seconds}s` : `${exercise.sets ?? 1}×${exercise.repetitions ?? 8}`}
-                      </span>
-                    </div>
-                    <p className="text-sm leading-6 text-[var(--text-secondary)]">{exercise.description}</p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )
-        })}
+        <PlanTabs exercises={exercises} />
       </div>
     </main>
   )

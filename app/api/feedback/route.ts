@@ -16,17 +16,26 @@ export async function POST(request: Request) {
     transcript?: TranscriptMessage[]
     exercises?: Exercise[]
     sessionId: string | null
-    feedback: SessionFeedback[]
+    feedback?: SessionFeedback[]
+    skipPlanAdjustment?: boolean
   }
-  const { sessionId, feedback } = body
+  const { sessionId } = body
+  const feedback = body.feedback ?? []
+  const skipPlanAdjustment = body.skipPlanAdjustment ?? false
   const transcript = body.transcript ?? []
   const completedExercises = body.exercises ?? []
 
   // Save feedback to session if we have a session ID
   if (sessionId) {
+    const sessionUpdate: { completed_at: string; feedback?: SessionFeedback[] } = {
+      completed_at: new Date().toISOString(),
+    }
+    if (!skipPlanAdjustment && feedback.length > 0) {
+      sessionUpdate.feedback = feedback
+    }
     await supabase
       .from('sessions')
-      .update({ feedback, completed_at: new Date().toISOString() })
+      .update(sessionUpdate)
       .eq('id', sessionId)
   }
 
@@ -65,6 +74,10 @@ export async function POST(request: Request) {
     console.error('Gamification update failed:', err)
     return null
   })
+
+  if (skipPlanAdjustment || feedback.length === 0) {
+    return NextResponse.json({ ok: true, gamification, skippedPlanAdjustment: true })
+  }
 
   const memoryTexts = await getRelevantMemories(
     user.id,

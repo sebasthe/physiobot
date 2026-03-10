@@ -62,9 +62,9 @@ export default function HealthProfilePage() {
   }
 
   return (
-    <main className="min-h-screen px-5 pb-10" style={{ paddingTop: 'max(24px, var(--safe-top))' }}>
+    <main className="vital-gradient mx-auto min-h-screen max-w-xl px-5 pb-10 md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8" style={{ paddingTop: 'max(24px, var(--safe-top))' }}>
       {/* Header */}
-      <div className="mb-8 animate-slide-up">
+      <div className="mb-8 animate-slide-up md:max-w-2xl">
         <div className="text-phase mb-2" style={{ color: 'var(--primary)', letterSpacing: '0.2em', fontSize: '0.65rem' }}>DEIN PROFIL</div>
         <h1 className="font-display uppercase" style={{ fontSize: 'clamp(2rem, 10vw, 3.5rem)', lineHeight: 0.95, color: 'var(--foreground)' }}>
           Gesundheits<span style={{ color: 'var(--primary)' }}>profil</span>
@@ -74,14 +74,14 @@ export default function HealthProfilePage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-8 md:grid md:grid-cols-2 md:gap-8 md:space-y-0">
         {/* Complaints */}
-        <div>
+        <div className="md:col-span-2">
           <Label className="text-sm font-semibold mb-3 block" style={{ color: 'var(--foreground)' }}>
             Wo hast du Beschwerden?
             <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>Mehrfachauswahl möglich</span>
           </Label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
             {COMPLAINT_OPTIONS.map(({ label, emoji }) => {
               const selected = complaints.includes(label)
               return (
@@ -195,7 +195,7 @@ export default function HealthProfilePage() {
         <button
           type="submit"
           disabled={isLoading || !goals.trim()}
-          className="btn-primary w-full rounded-xl py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary w-full rounded-xl py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed md:col-span-2"
         >
           {isLoading ? 'Plan wird erstellt…' : 'Trainingsplan erstellen →'}
         </button>
