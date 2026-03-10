@@ -13,6 +13,8 @@ interface UseVoiceSessionConfig {
   tts: TTSProvider
   llm: LLMProvider
   onToolCall?: (tool: { name: string; input: Record<string, unknown> }) => void
+  onPartialTranscript?: (text: string) => void
+  onCommittedTranscript?: (text: string) => void
   onError?: (error: Error) => void
 }
 
@@ -31,6 +33,8 @@ export function useVoiceSession({
   tts,
   llm,
   onToolCall,
+  onPartialTranscript,
+  onCommittedTranscript,
   onError,
 }: UseVoiceSessionConfig): UseVoiceSessionReturn {
   const sessionRef = useRef<VoiceSession | null>(null)
@@ -39,6 +43,14 @@ export function useVoiceSession({
 
   const handleToolCall = useEffectEvent((tool: { name: string; input: Record<string, unknown> }) => {
     onToolCall?.(tool)
+  })
+
+  const handlePartialTranscript = useEffectEvent((text: string) => {
+    onPartialTranscript?.(text)
+  })
+
+  const handleCommittedTranscript = useEffectEvent((text: string) => {
+    onCommittedTranscript?.(text)
   })
 
   const handleError = useEffectEvent((error: Error) => {
@@ -61,6 +73,14 @@ export function useVoiceSession({
       handleToolCall(tool)
     })
 
+    session.on('partialTranscript', text => {
+      handlePartialTranscript(text)
+    })
+
+    session.on('committedTranscript', text => {
+      handleCommittedTranscript(text)
+    })
+
     session.on('error', error => {
       handleError(error)
     })
@@ -69,7 +89,7 @@ export function useVoiceSession({
       session.destroy()
       sessionRef.current = null
     }
-  }, [config, stt, tts, llm, handleError, handleToolCall])
+  }, [config, stt, tts, llm, handleCommittedTranscript, handleError, handlePartialTranscript, handleToolCall])
 
   async function sendMessage(text: string, context: TurnContext): Promise<string> {
     if (!sessionRef.current) {

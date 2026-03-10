@@ -1,8 +1,7 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { createVoiceProvider } from '@/lib/voice'
 import SessionPlayer from '@/components/training/SessionPlayer'
 import type { Exercise } from '@/lib/types'
 import type { TranscriptMessage } from '@/lib/mem0'
@@ -12,11 +11,6 @@ export default function TrainingSessionPage() {
   const [sessionId, setSessionId] = useState<string>()
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-  const voiceRef = useRef<ReturnType<typeof createVoiceProvider> | null>(null)
-  if (!voiceRef.current) {
-    voiceRef.current = createVoiceProvider()
-  }
-  const voice = voiceRef.current
 
   useEffect(() => {
     loadPlan().catch(err => {
@@ -65,14 +59,7 @@ export default function TrainingSessionPage() {
     setIsLoading(false)
   }
 
-  const handleComplete = async () => {
-    voice.stop()
-    const query = sessionId ? `?session=${sessionId}` : ''
-    router.push(`/training/feedback${query}`)
-  }
-
   const handleSessionComplete = async (payload: { transcript: TranscriptMessage[]; completedExercises: Exercise[] }) => {
-    voice.stop()
     if (typeof window !== 'undefined') {
       const storageKey = sessionId ? `session-transcript:${sessionId}` : 'session-transcript:pending'
       window.sessionStorage.setItem(storageKey, JSON.stringify(payload))
@@ -101,8 +88,6 @@ export default function TrainingSessionPage() {
     <SessionPlayer
       exercises={exercises}
       onComplete={handleSessionComplete}
-      speak={(text) => voice.speak(text)}
-      stopSpeaking={() => voice.stop()}
       sessionId={sessionId}
     />
   )
