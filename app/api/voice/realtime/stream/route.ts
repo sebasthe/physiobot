@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { TranscriptMessage } from '@/lib/mem0'
 import { streamVoiceTurnOrchestration } from '@/lib/voice/server-orchestrator'
+import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
 
 function sseData(payload: unknown) {
   return `data: ${JSON.stringify(payload)}\n\n`
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
     messages?: TranscriptMessage[]
     currentExercise?: { name?: string; description?: string; phase?: string }
     sessionNumber?: number
+    tools?: ToolDefinition[]
+    workoutState?: WorkoutState
   }
 
   const stream = new ReadableStream({
@@ -36,9 +39,19 @@ export async function POST(request: Request) {
             messages: body.messages,
             currentExercise: body.currentExercise,
             sessionNumber: body.sessionNumber,
+            tools: body.tools,
+            workoutState: body.workoutState,
           })) {
             if (chunk.type === 'delta') {
               controller.enqueue(encoder.encode(sseData({ type: 'delta', text: chunk.text })))
+              continue
+            }
+            if (chunk.type === 'tool_call') {
+              controller.enqueue(encoder.encode(sseData({
+                type: 'tool_call',
+                name: chunk.name,
+                input: chunk.input,
+              })))
               continue
             }
             controller.enqueue(encoder.encode(sseData({

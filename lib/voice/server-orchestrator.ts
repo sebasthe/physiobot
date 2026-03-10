@@ -1,12 +1,16 @@
+import type { Tool as AnthropicTool } from '@anthropic-ai/sdk/resources/messages'
 import { anthropic } from '@/lib/claude/client'
 import { buildDrMiaSystemPrompt } from '@/lib/claude/prompts'
 import { getSessionContext, type TranscriptMessage } from '@/lib/mem0'
+import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
 
 interface VoiceOrchestratorInput {
   userId: string
   messages?: TranscriptMessage[]
   currentExercise?: { name?: string; description?: string; phase?: string }
   sessionNumber?: number
+  tools?: ToolDefinition[]
+  workoutState?: WorkoutState
 }
 
 interface VoiceOrchestratorResult {
@@ -21,6 +25,7 @@ interface VoiceOrchestrationPrompt {
 
 export type VoiceTurnStreamChunk =
   | { type: 'delta'; text: string }
+  | { type: 'tool_call'; name: string; input: Record<string, unknown> }
   | { type: 'done'; reply: string; llmLatencyMs: number }
 
 function getPhaseHint(phase: string | undefined) {
@@ -44,6 +49,7 @@ export async function runVoiceTurnOrchestration(
     max_tokens: 300,
     system: prompt.system,
     messages: prompt.messages,
+    tools: mapAnthropicTools(input.tools),
   })
 
   const content = response.content.find(item => item.type === 'text')
@@ -69,22 +75,55 @@ export async function* streamVoiceTurnOrchestration(
     stream: true,
     system: prompt.system,
     messages: prompt.messages,
+    tools: mapAnthropicTools(input.tools),
   })
 
   let fullReply = ''
   let firstDeltaAt: number | null = null
+  let sawToolCall = false
+  let pendingToolUse: {
+    name: string
+    input: Record<string, unknown> | null
+    partialJson: string
+  } | null = null
+
   for await (const event of stream as any) {
-    if (event?.type !== 'content_block_delta') continue
-    if (event?.delta?.type !== 'text_delta') continue
-    const text = typeof event.delta.text === 'string' ? event.delta.text : ''
-    if (!text) continue
-    if (!firstDeltaAt) firstDeltaAt = Date.now()
-    fullReply += text
-    yield { type: 'delta', text }
+    if (event?.type === 'content_block_start' && event?.content_block?.type === 'tool_use') {
+      pendingToolUse = {
+        name: typeof event.content_block.name === 'string' ? event.content_block.name : 'unknown_tool',
+        input: isRecord(event.content_block.input) ? event.content_block.input : null,
+        partialJson: '',
+      }
+      continue
+    }
+
+    if (event?.type === 'content_block_delta' && event?.delta?.type === 'input_json_delta' && pendingToolUse) {
+      pendingToolUse.partialJson += typeof event.delta.partial_json === 'string' ? event.delta.partial_json : ''
+      continue
+    }
+
+    if (event?.type === 'content_block_stop' && pendingToolUse) {
+      sawToolCall = true
+      yield {
+        type: 'tool_call',
+        name: pendingToolUse.name,
+        input: parseToolInput(pendingToolUse.partialJson, pendingToolUse.input),
+      }
+      pendingToolUse = null
+      continue
+    }
+
+    if (event?.type === 'content_block_delta' && event?.delta?.type === 'text_delta') {
+      const text = typeof event.delta.text === 'string' ? event.delta.text : ''
+      if (!text) continue
+      if (!firstDeltaAt) firstDeltaAt = Date.now()
+      fullReply += text
+      yield { type: 'delta', text }
+    }
   }
 
   const reply = fullReply.trim()
-  if (!reply) {
+  if (!reply && !sawToolCall) {
     throw new Error('No response text returned')
   }
 
@@ -136,11 +175,20 @@ async function buildVoiceOrchestrationPrompt(
   const contextMessage = input.currentExercise?.name
     ? `Aktuelle Übung: ${input.currentExercise.name}. Beschreibung: ${input.currentExercise.description ?? 'keine zusätzliche Beschreibung'}. Phase: ${input.currentExercise.phase ?? 'main'}. ${getPhaseHint(input.currentExercise.phase)}`
     : 'Aktuell läuft eine Physio-Session.'
+  const workoutStateMessage = input.workoutState
+    ? `WorkoutState: ${JSON.stringify({
+        status: input.workoutState.status,
+        currentExerciseIndex: input.workoutState.currentExerciseIndex,
+        currentExercise: input.workoutState.exercises[input.workoutState.currentExerciseIndex] ?? null,
+        exercises: input.workoutState.exercises,
+      })}`
+    : null
 
   const responseStyleMessage = 'Antwortstil: maximal 2-3 kurze Sätze, konkrete nächste Aktion, empathisch aber ohne Schreiwörter oder übertriebene Rhetorik.'
 
   const messages = [
     { role: 'user' as const, content: contextMessage },
+    ...(workoutStateMessage ? [{ role: 'user' as const, content: workoutStateMessage }] : []),
     { role: 'user' as const, content: responseStyleMessage },
     ...((input.messages ?? []).map(message => ({
       role: message.role,
@@ -149,4 +197,35 @@ async function buildVoiceOrchestrationPrompt(
   ]
 
   return { system, messages }
+}
+
+function mapAnthropicTools(tools?: ToolDefinition[]): AnthropicTool[] | undefined {
+  if (!tools?.length) {
+    return undefined
+  }
+
+  return tools.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.input_schema as AnthropicTool['input_schema'],
+  }))
+}
+
+function parseToolInput(partialJson: string, fallback: Record<string, unknown> | null): Record<string, unknown> {
+  if (partialJson.trim()) {
+    try {
+      const parsed = JSON.parse(partialJson) as unknown
+      if (isRecord(parsed)) {
+        return parsed
+      }
+    } catch {
+      return fallback ?? {}
+    }
+  }
+
+  return fallback ?? {}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
