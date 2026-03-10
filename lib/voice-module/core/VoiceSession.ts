@@ -36,15 +36,23 @@ export class VoiceSession {
       this.state = state
     })
 
+    const previousPartialTranscript = dependencies.stt.onPartialTranscript
+    const previousCommittedTranscript = dependencies.stt.onCommittedTranscript
+    const previousErrorHandler = dependencies.stt.onError
+
+    dependencies.stt.onPartialTranscript = text => {
+      previousPartialTranscript?.(text)
+      this.events.emit('partialTranscript', text)
+    }
+
     dependencies.stt.onCommittedTranscript = text => {
-      this.events.emit('transcript', {
-        role: 'user',
-        content: text,
-        timestamp: Date.now(),
-      })
+      previousCommittedTranscript?.(text)
+      this.events.emit('committedTranscript', text)
     }
 
     dependencies.stt.onError = error => {
+      previousErrorHandler?.(error)
+      this.events.emit('turnStateChanged', 'idle')
       this.events.emit('error', error)
     }
   }
@@ -64,7 +72,12 @@ export class VoiceSession {
   async startListening(): Promise<void> {
     this.events.emit('turnStateChanged', 'listening')
     this.events.emit('sessionStarted')
-    await this.dependencies.stt.start()
+    try {
+      await this.dependencies.stt.start()
+    } catch (error) {
+      this.events.emit('turnStateChanged', 'idle')
+      throw error
+    }
   }
 
   stopListening(): void {

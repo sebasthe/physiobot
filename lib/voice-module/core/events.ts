@@ -4,6 +4,8 @@ export interface VoiceEventMap {
   turnStateChanged: TurnState
   toolCall: { name: string; input: Record<string, unknown> }
   transcript: TranscriptMessage
+  partialTranscript: string
+  committedTranscript: string
   error: Error
   interruptRequested: void
   sessionStarted: void
