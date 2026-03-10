@@ -21,7 +21,7 @@ export default function PlanOverview({ exercises, onStartTraining }: Props) {
         if (phaseExercises.length === 0) return null
         const config = PHASE_CONFIG[phase]
         return (
-          <div key={phase} className="rounded-[24px] border border-[var(--border)] bg-white p-4 shadow-[var(--shadow-sm)]">
+          <div key={phase} className="surface-card p-4">
             <div className="mb-4 flex items-center gap-2">
               <span className="text-xl">{config.emoji}</span>
               <span className="text-phase" style={{ color: config.color, letterSpacing: '0.15em', fontSize: '0.65rem' }}>
@@ -39,7 +39,7 @@ export default function PlanOverview({ exercises, onStartTraining }: Props) {
                       <div className="font-semibold text-[15px]" style={{ color: 'var(--foreground)' }}>{ex.name}</div>
                       <div className="mt-1 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>{ex.description}</div>
                     </div>
-                    <div className="rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap" style={{ background: 'var(--teal-light)', color: 'var(--teal)' }}>
+                    <div className="rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap" style={{ background: 'var(--teal-light)', color: 'var(--accent)' }}>
                       {ex.duration_seconds ? `${ex.duration_seconds}s` : `${ex.sets}×${ex.repetitions}`}
                     </div>
                   </div>

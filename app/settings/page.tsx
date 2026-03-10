@@ -67,26 +67,33 @@ export default async function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-[430px] px-5 pb-12 pt-8">
-      <div className="mb-6">
-        <TransitionLink href="/dashboard" className="mb-4 inline-flex text-sm font-semibold text-[var(--teal)]">
-          ← Zurück zum Dashboard
-        </TransitionLink>
-        <div className="text-phase mb-2 text-[var(--teal)]">Einstellungen</div>
-        <h1 className="font-display text-5xl leading-none text-[var(--foreground)]">Dein Profil.</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
-          Trainingstage, Erinnerungszeit und Kontodaten verwalten.
-        </p>
-      </div>
+    <main className="vital-gradient min-h-screen pb-12 lg:min-h-full">
+      <div className="px-6 pt-12 md:px-8 md:pb-8 lg:px-10 lg:pb-10 xl:px-12 xl:pt-14">
+        <div className="mb-10 md:flex md:items-end md:justify-between md:gap-8">
+          <div>
+            <TransitionLink href="/dashboard" className="mb-8 inline-flex items-center gap-2 p-0 text-sm font-semibold text-[var(--accent)] transition-colors hover:text-[color:rgba(42,157,138,0.8)]">
+              ← Zurück zum Dashboard
+            </TransitionLink>
+            <span className="mb-2 block text-xs font-medium uppercase tracking-[0.28em] text-[rgba(42,157,138,0.6)]">Einstellungen</span>
+            <h1 className="font-display text-6xl uppercase tracking-tight text-white">Dein Profil.</h1>
+            <p className="mt-2 text-sm text-white/40">
+              Trainingstage, Erinnerungszeit und Kontodaten verwalten.
+            </p>
+          </div>
+          <div className="mt-6 rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.18em] text-white/45 md:mt-0 md:max-w-xs">
+            Desktop bündelt die Einstellungen in einem zweispaltigen Workspace.
+          </div>
+        </div>
 
-      <SettingsClient
-        userId={user.id}
-        initialEmail={user.email ?? ''}
-        initialName={typedProfile.name ?? ''}
-        initialSchedule={(schedule as Schedule | null) ?? null}
-        physioInfo={physioInfo}
-        isSelfCreatedPlan={isSelfCreatedPlan}
-      />
+        <SettingsClient
+          userId={user.id}
+          initialEmail={user.email ?? ''}
+          initialName={typedProfile.name ?? ''}
+          initialSchedule={(schedule as Schedule | null) ?? null}
+          physioInfo={physioInfo}
+          isSelfCreatedPlan={isSelfCreatedPlan}
+        />
+      </div>
     </main>
   )
 }

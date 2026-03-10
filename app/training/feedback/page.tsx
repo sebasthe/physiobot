@@ -1,30 +1,56 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Flame,
+  LoaderCircle,
+  SkipForward,
+  Smile,
+  Trophy,
+  Wind,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Exercise, SessionFeedback } from '@/lib/types'
+import { XP_PER_PHASE } from '@/lib/types'
 import type { TranscriptMessage } from '@/lib/mem0'
 
-const DIFFICULTY_OPTIONS = [
-  { value: 'too_easy',  emoji: '🌟', label: 'Zu leicht', color: '#63B2FF', bg: 'rgba(99,178,255,0.12)' },
-  { value: 'right',     emoji: '✅', label: 'Passt',     color: '#4CAF82', bg: 'rgba(76,175,130,0.12)' },
-  { value: 'too_hard',  emoji: '🔥', label: 'Zu hart',   color: '#F0A04B', bg: 'rgba(240,160,75,0.12)' },
-  { value: 'painful',   emoji: '⚠️', label: 'Schmerz',   color: '#E85D5D', bg: 'rgba(232,93,93,0.12)' },
+const PHASE_LABELS: Record<Exercise['phase'], string> = {
+  warmup: 'Warm-up',
+  main: 'Main',
+  cooldown: 'Cool-down',
+}
+
+const DIFFICULTY_OPTIONS: Array<{
+  value: SessionFeedback['difficulty']
+  label: string
+  icon: LucideIcon
+  color: string
+  background: string
+}> = [
+  { value: 'too_easy', label: 'Zu leicht', icon: Smile, color: '#63B2FF', background: 'rgba(99,178,255,0.14)' },
+  { value: 'right', label: 'Passt', icon: CheckCircle2, color: '#63CDB9', background: 'rgba(99,205,185,0.14)' },
+  { value: 'too_hard', label: 'Zu hart', icon: Flame, color: '#F0A04B', background: 'rgba(240,160,75,0.14)' },
+  { value: 'painful', label: 'Schmerz', icon: AlertTriangle, color: '#E85D5D', background: 'rgba(232,93,93,0.14)' },
 ] as const
 
 function FeedbackForm() {
   const [feedbacks, setFeedbacks] = useState<SessionFeedback[]>([])
-  const [exercises, setExercises] = useState<{ name: string; index: number }[]>([])
+  const [exercises, setExercises] = useState<Exercise[]>([])
   const [completedExercises, setCompletedExercises] = useState<Exercise[]>([])
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitMode, setSubmitMode] = useState<'submit' | 'skip' | null>(null)
   const [loaded, setLoaded] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session')
 
   useEffect(() => {
-    loadExercises()
+    void loadExercises()
     loadStoredSessionData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -47,25 +73,27 @@ function FeedbackForm() {
   const loadExercises = async () => {
     const supabase = createClient()
 
-    // If no sessionId, load from active plan directly
     if (!sessionId) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+
       const { data: profile } = await supabase
         .from('profiles')
         .select('active_plan_id')
         .eq('id', user.id)
         .single()
       if (!profile?.active_plan_id) return
+
       const { data: plan } = await supabase
         .from('training_plans')
         .select('exercises')
         .eq('id', profile.active_plan_id)
         .single()
       if (!plan) return
-      const exs = (plan.exercises as { name: string }[]).map((e, i) => ({ name: e.name, index: i }))
-      setExercises(exs)
-      setFeedbacks(exs.map(e => ({ exercise_id: String(e.index), difficulty: 'right' as const })))
+
+      const planExercises = plan.exercises as Exercise[]
+      setExercises(planExercises)
+      setFeedbacks(planExercises.map((_, index) => ({ exercise_id: String(index), difficulty: 'right' })))
       setLoaded(true)
       return
     }
@@ -84,157 +112,216 @@ function FeedbackForm() {
       .single()
     if (!plan) return
 
-    const exs = (plan.exercises as { name: string }[]).map((e, i) => ({ name: e.name, index: i }))
-    setExercises(exs)
-    setFeedbacks(exs.map(e => ({ exercise_id: String(e.index), difficulty: 'right' as const })))
+    const planExercises = plan.exercises as Exercise[]
+    setExercises(planExercises)
+    setFeedbacks(planExercises.map((_, index) => ({ exercise_id: String(index), difficulty: 'right' })))
     setLoaded(true)
   }
 
   const updateFeedback = (index: number, difficulty: SessionFeedback['difficulty']) => {
-    setFeedbacks(prev => prev.map((f, i) => i === index ? { ...f, difficulty } : f))
+    setFeedbacks(prev => prev.map((feedback, itemIndex) => (
+      itemIndex === index ? { ...feedback, difficulty } : feedback
+    )))
   }
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true)
+  const submitFeedback = async (skipPlanAdjustment = false) => {
+    setSubmitMode(skipPlanAdjustment ? 'skip' : 'submit')
     try {
       await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, feedback: feedbacks, transcript, exercises: completedExercises }),
+        body: JSON.stringify({
+          sessionId,
+          feedback: skipPlanAdjustment ? [] : feedbacks,
+          transcript,
+          exercises: completedExercises,
+          skipPlanAdjustment,
+        }),
       })
       router.push('/dashboard')
-    } catch (err) {
-      console.error('Feedback submission failed:', err)
-      setIsSubmitting(false)
+    } catch (error) {
+      console.error('Feedback submission failed:', error)
+      setSubmitMode(null)
     }
   }
 
+  const xpGained = useMemo(() => {
+    const source = completedExercises.length > 0 ? completedExercises : exercises
+    if (source.length === 0) return 0
+    return source.reduce((sum, exercise) => sum + XP_PER_PHASE[exercise.phase], 0)
+  }, [completedExercises, exercises])
+
+  const isBusy = submitMode !== null
+  const actionLabel = submitMode === 'submit'
+    ? 'Plan wird angepasst...'
+    : submitMode === 'skip'
+      ? 'Wird übersprungen...'
+      : 'Feedback senden'
+
   return (
-    <main
-      className="min-h-screen flex flex-col"
-      style={{ background: 'var(--background)', maxWidth: 430, margin: '0 auto' }}
-    >
-      <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 70% 40% at 50% 0%, rgba(29,122,106,0.09) 0%, transparent 70%)' }} />
+    <main className="feedback-page vital-gradient relative min-h-screen overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(42,157,138,0.16),transparent_34%)]" />
 
-      <div className="relative z-10 px-6 pb-8 pt-12 text-center animate-slide-up">
-        <div className="mx-auto mb-4 flex h-20 w-20 animate-pulse-glow items-center justify-center rounded-full bg-[var(--gold-light)] text-4xl">
-          🏆
-        </div>
-        <div className="text-phase mb-3" style={{ color: 'var(--teal)' }}>
-          Session geschafft
-        </div>
-        <h1 className="font-display text-5xl leading-none text-[var(--foreground)]">
-          Stark <span style={{ color: 'var(--teal)' }}>gemacht</span>
-        </h1>
-        <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Dr. Mia passt deinen Plan anhand deines Feedbacks an.
-        </p>
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          <div className="rounded-2xl bg-white px-3 py-4 shadow-[var(--shadow-sm)]">
-            <div className="text-xl">⚡</div>
-            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">+40</div>
-            <div className="text-[11px] text-[var(--text-muted)]">XP</div>
+      <div className="feedback-page__shell relative z-10 mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pb-[calc(8.5rem+var(--safe-bottom))] pt-8 md:max-w-3xl md:px-6 lg:max-w-6xl lg:px-8 lg:pb-10 lg:pt-10">
+        <section className="feedback-page__header animate-slide-up px-2 pb-8 pt-3 text-center md:px-0 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,0.8fr)] lg:items-center lg:gap-10 lg:text-left">
+          <div>
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-[rgba(240,160,75,0.18)] bg-[rgba(240,160,75,0.12)] text-[var(--primary)] lg:mx-0">
+              <Trophy size={38} strokeWidth={2.25} />
+            </div>
+            <div className="text-phase mb-3" style={{ color: 'var(--primary)' }}>
+              Session geschafft
+            </div>
+            <h1 className="font-display text-[clamp(3.6rem,12vw,5.8rem)] uppercase leading-[0.9] tracking-[0.01em] text-[var(--foreground)]">
+              Stark <span className="italic text-[var(--accent)]">gemacht</span>
+            </h1>
+            <p className="mx-auto mt-4 max-w-[28rem] text-sm leading-7 text-white/46 lg:mx-0">
+              Dr. Mia passt deinen Plan anhand deines Feedbacks an. Wenn du heute nichts anpassen willst,
+              kannst du die Auswertung auch direkt überspringen.
+            </p>
           </div>
-          <div className="rounded-2xl bg-white px-3 py-4 shadow-[var(--shadow-sm)]">
-            <div className="text-xl">🔥</div>
-            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">+1</div>
-            <div className="text-[11px] text-[var(--text-muted)]">Streak</div>
-          </div>
-          <div className="rounded-2xl bg-white px-3 py-4 shadow-[var(--shadow-sm)]">
-            <div className="text-xl">🌿</div>
-            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">{exercises.length}</div>
-            <div className="text-[11px] text-[var(--text-muted)]">Übungen</div>
-          </div>
-        </div>
-      </div>
 
-      <div className="relative z-10 flex-1 px-4 space-y-3 pb-4">
-        {!loaded && (
-          <div className="flex items-center justify-center py-12">
-            <span
-              className="text-phase animate-pulse"
-              style={{ color: 'var(--text-muted)', letterSpacing: '0.2em' }}
-            >
-              LADEN...
-            </span>
+          <div className="mt-6 grid grid-cols-3 gap-3 lg:mt-0">
+            <div className="metric-card p-4 text-center">
+              <Zap className="mx-auto mb-2 text-[var(--accent)]" size={22} />
+              <div className="font-display text-2xl leading-none text-white">+{xpGained}</div>
+              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">XP</div>
+            </div>
+            <div className="metric-card p-4 text-center">
+              <Flame className="mx-auto mb-2 text-[var(--primary)]" size={22} />
+              <div className="font-display text-2xl leading-none text-white">+1</div>
+              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">Streak</div>
+            </div>
+            <div className="metric-card p-4 text-center">
+              <Wind className="mx-auto mb-2 text-[var(--accent)]" size={22} />
+              <div className="font-display text-2xl leading-none text-white">
+                {completedExercises.length > 0 ? completedExercises.length : exercises.length}
+              </div>
+              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">Übungen</div>
+            </div>
           </div>
-        )}
-        {exercises.map((ex, i) => {
-          const selected = feedbacks[i]?.difficulty
-          const selectedOpt = DIFFICULTY_OPTIONS.find(o => o.value === selected)
-          return (
-            <div
-              key={i}
-              className="animate-slide-up"
-              style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'both' }}
-            >
-              <div
-                className="rounded-xl p-3"
-                style={{
-                  background: selectedOpt ? selectedOpt.bg : 'var(--card)',
-                  border: `1px solid ${selectedOpt ? selectedOpt.color + '40' : 'var(--border)'}`,
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {/* Exercise name */}
-                <div
-                  className="font-display text-xl mb-3"
-                  style={{ color: 'var(--foreground)' }}
-                >
-                  {ex.name}
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {DIFFICULTY_OPTIONS.map(opt => {
-                    const isSelected = selected === opt.value
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => updateFeedback(i, opt.value as SessionFeedback['difficulty'])}
-                        className="flex flex-col items-center gap-0.5 rounded-lg py-2 transition-all"
-                        style={{
-                          background: isSelected ? opt.bg : 'transparent',
-                          border: `1px solid ${isSelected ? opt.color : 'var(--border)'}`,
-                          transform: isSelected ? 'scale(1.04)' : 'scale(1)',
-                        }}
-                      >
-                        <span style={{ fontSize: '1.1rem' }}>{opt.emoji}</span>
-                        <span
-                          style={{
-                            fontSize: '0.55rem',
-                            fontFamily: 'var(--font-body)',
-                            letterSpacing: '0.06em',
-                            color: isSelected ? opt.color : 'var(--text-muted)',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {opt.label}
-                        </span>
-                      </button>
-                    )
-                  })}
+        </section>
+
+        <section className="feedback-page__content relative z-10 flex-1 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6">
+          <div className="space-y-4">
+            {!loaded && (
+              <div className="flex items-center justify-center py-16">
+                <div className="flex items-center gap-3 text-white/46">
+                  <LoaderCircle className="animate-spin" size={18} />
+                  <span className="text-phase" style={{ letterSpacing: '0.22em' }}>Feedback wird geladen</span>
                 </div>
               </div>
+            )}
+
+            {loaded && exercises.map((exercise, index) => {
+              const selected = feedbacks[index]?.difficulty
+              return (
+                <article
+                  key={`${exercise.name}-${index}`}
+                  className="glass-card animate-slide-up rounded-[1.6rem] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.16)]"
+                  style={{ animationDelay: `${index * 60}ms`, animationFillMode: 'both' }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="mb-2 text-[10px] uppercase tracking-[0.24em] text-white/32">
+                        Übung {index + 1} von {exercises.length}
+                      </div>
+                      <h2 className="font-display text-[2rem] uppercase leading-[0.92] tracking-[0.01em] text-white">
+                        {exercise.name}
+                      </h2>
+                    </div>
+                    <div className="shrink-0 rounded-full border border-white/8 bg-white/4 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-white/38">
+                      {PHASE_LABELS[exercise.phase]}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {DIFFICULTY_OPTIONS.map(option => {
+                      const Icon = option.icon
+                      const isSelected = selected === option.value
+                      return (
+                        <button
+                          key={option.value}
+                          onClick={() => updateFeedback(index, option.value)}
+                          className="flex min-h-[4.7rem] flex-col items-center justify-center gap-1.5 rounded-[1rem] border px-2 py-3 text-center transition-all"
+                          style={{
+                            background: isSelected ? option.background : 'rgba(255,255,255,0.03)',
+                            borderColor: isSelected ? option.color : 'rgba(255,255,255,0.08)',
+                            color: isSelected ? option.color : 'rgba(255,255,255,0.32)',
+                            boxShadow: isSelected ? `0 14px 28px ${option.color}18` : 'none',
+                            transform: isSelected ? 'translateY(-1px)' : 'translateY(0)',
+                          }}
+                        >
+                          <Icon size={20} strokeWidth={isSelected ? 2.4 : 2} />
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.18em]">
+                            {option.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+
+          <aside className="mt-6 hidden lg:block">
+            <div className="glass-card sticky top-6 rounded-[1.75rem] p-5">
+              <div className="text-phase mb-3" style={{ color: 'var(--primary)' }}>
+                Nächster Schritt
+              </div>
+              <h2 className="font-display text-3xl uppercase leading-none text-white">Plan updaten</h2>
+              <p className="mt-3 text-sm leading-7 text-white/48">
+                Sende dein Feedback für die nächste Plananpassung oder springe direkt zurück ins Dashboard.
+              </p>
+
+              <div className="mt-6 space-y-3">
+                <button
+                  onClick={() => void submitFeedback(false)}
+                  disabled={isBusy || !loaded}
+                  className="btn-primary w-full rounded-2xl py-4 text-base disabled:opacity-50"
+                >
+                  {actionLabel}
+                </button>
+                <button
+                  onClick={() => void submitFeedback(true)}
+                  disabled={isBusy || !loaded}
+                  className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-4 text-sm font-semibold uppercase tracking-[0.16em] text-white/72 transition hover:bg-white/7 disabled:opacity-50"
+                >
+                  Feedback überspringen
+                </button>
+              </div>
             </div>
-          )
-        })}
+          </aside>
+        </section>
       </div>
 
-      <div
-        className="relative z-10 px-6 py-6"
-        style={{ paddingBottom: 'calc(1.5rem + var(--safe-bottom, 0px))' }}
-      >
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting || !loaded}
-          className="btn-primary w-full rounded-2xl py-4 text-lg disabled:opacity-50"
-        >
-          {isSubmitting ? 'Plan wird angepasst...' : 'Feedback senden'}
-        </button>
+      <div className="bottom-nav-shell lg:hidden">
+        <div className="bottom-nav grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <button
+            onClick={() => void submitFeedback(false)}
+            disabled={isBusy || !loaded}
+            className="btn-primary min-h-[3.75rem] rounded-[1rem] px-4 text-sm uppercase tracking-[0.14em] disabled:opacity-50"
+          >
+            {actionLabel}
+          </button>
+          <button
+            onClick={() => void submitFeedback(true)}
+            disabled={isBusy || !loaded}
+            className="inline-flex min-h-[3.75rem] items-center justify-center gap-2 rounded-[1rem] border border-white/10 bg-white/4 px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72 transition hover:bg-white/7 disabled:opacity-50"
+          >
+            <SkipForward size={16} />
+            Überspringen
+          </button>
+        </div>
       </div>
     </main>
   )
 }
 
 export default function FeedbackPage() {
-  return <Suspense><FeedbackForm /></Suspense>
+  return (
+    <Suspense>
+      <FeedbackForm />
+    </Suspense>
+  )
 }

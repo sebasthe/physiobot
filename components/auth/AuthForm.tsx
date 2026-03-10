@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { Lock, Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -23,37 +24,45 @@ export default function AuthForm({ mode, onSubmit, isLoading, error }: AuthFormP
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          placeholder="deine@email.de"
-          autoComplete="email"
-        />
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-white/30" />
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="deine@email.de"
+            autoComplete="email"
+            className="pl-11"
+          />
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="password">Passwort</Label>
-        <Input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          placeholder="••••••••"
-          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-        />
+        <div className="relative">
+          <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-white/30" />
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="••••••••"
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            className="pl-11"
+          />
+        </div>
       </div>
       {error && (
-        <p className="text-sm rounded-lg px-3 py-2" style={{ color: 'var(--danger)', background: 'rgba(232,93,93,0.08)' }}>
+        <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm" style={{ color: 'var(--danger)' }}>
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={isLoading}
-        className="btn-primary w-full rounded-xl py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+        className="btn-primary w-full rounded-2xl py-4 text-base disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isLoading ? '...' : mode === 'login' ? 'Anmelden' : 'Registrieren'}
       </button>

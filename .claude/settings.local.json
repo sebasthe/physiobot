@@ -7,7 +7,10 @@
       "Bash(npx shadcn@latest:*)",
       "Bash(npm run:*)",
       "Bash(git init:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(cat:*)",
+      "Bash(lsof:*)",
+      "Bash(npx playwright:*)"
     ]
   }
 }

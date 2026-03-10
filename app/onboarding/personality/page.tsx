@@ -95,7 +95,7 @@ export default function PersonalityOnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col px-5 pt-safe" style={{ paddingTop: 'max(24px, var(--safe-top))' }}>
+    <main className="vital-gradient mx-auto flex min-h-screen max-w-xl flex-col px-5 pt-safe md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8" style={{ paddingTop: 'max(24px, var(--safe-top))' }}>
       {/* Progress bar */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
@@ -112,7 +112,7 @@ export default function PersonalityOnboardingPage() {
             </button>
           )}
         </div>
-        <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+        <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
           <div
             className="h-full rounded-full transition-all duration-500"
             style={{ width: `${progress}%`, background: 'var(--primary)' }}
@@ -121,7 +121,7 @@ export default function PersonalityOnboardingPage() {
       </div>
 
       {/* Question */}
-      <div className="mb-8 animate-slide-up" key={step}>
+      <div className="mb-8 animate-slide-up md:max-w-2xl" key={step}>
         <h2 className="font-display uppercase mb-2" style={{ fontSize: 'clamp(1.8rem, 8vw, 2.8rem)', lineHeight: 1, color: 'var(--foreground)' }}>
           {current.question}
         </h2>
@@ -131,7 +131,7 @@ export default function PersonalityOnboardingPage() {
       </div>
 
       {/* Options */}
-      <div className="flex-1 space-y-3 animate-slide-up" key={`options-${step}`}>
+      <div className="flex-1 space-y-3 animate-slide-up md:grid md:grid-cols-2 md:gap-4 md:space-y-0" key={`options-${step}`}>
         {current.options.map(option => (
           <button
             key={option.value}
