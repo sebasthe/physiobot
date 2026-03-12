@@ -5,6 +5,7 @@ import { buildSystemPrompt, buildFeedbackPrompt } from '@/lib/claude/prompts'
 import { extractJson } from '@/lib/claude/extract-json'
 import { addSessionTranscript, extractAndStoreMemories, getRelevantMemories, type TranscriptMessage } from '@/lib/mem0'
 import { updateGamification } from '@/lib/gamification'
+import { extractSessionInsights } from '@/lib/memory/extractor'
 import type { SessionFeedback, UserPersonality, Exercise } from '@/lib/types'
 
 export async function POST(request: Request) {
@@ -47,6 +48,9 @@ export async function POST(request: Request) {
   }
   if (transcript.length > 0) {
     await addSessionTranscript(user.id, transcript, sessionId ?? undefined).catch(console.error)
+    void extractSessionInsights(user.id, transcript).catch(error => {
+      console.error('Session insight extraction failed:', error)
+    })
   }
 
   // Get current plan + user context

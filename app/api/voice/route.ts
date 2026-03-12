@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { readElevenLabsError, toElevenLabsErrorPayload } from '@/lib/voice/elevenlabs'
 
 const MAX_TEXT_LENGTH = 2000
 
@@ -54,7 +55,9 @@ export async function POST(request: Request) {
   )
 
   if (!response.ok) {
-    return NextResponse.json({ error: 'ElevenLabs error' }, { status: 502 })
+    const upstreamError = await readElevenLabsError(response, 'ElevenLabs error')
+    console.error('ElevenLabs error', upstreamError)
+    return NextResponse.json(toElevenLabsErrorPayload(upstreamError), { status: upstreamError.status })
   }
 
   const audio = await response.arrayBuffer()

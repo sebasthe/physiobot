@@ -94,8 +94,18 @@ export function buildDrMiaSystemPrompt(params: {
   timeOfDay: 'morning' | 'midday' | 'evening'
   lastSession?: { date: string; duration: number; completedAll: boolean }
   sessionNumber: number
+  enableFiveWhys?: boolean
 }): string {
-  const { userName, streak, bodyAreas, memoryContext, timeOfDay, lastSession, sessionNumber } = params
+  const {
+    userName,
+    streak,
+    bodyAreas,
+    memoryContext,
+    timeOfDay,
+    lastSession,
+    sessionNumber,
+    enableFiveWhys = false,
+  } = params
 
   const timeLabel = timeOfDay === 'morning'
     ? 'Morgen (vor 11 Uhr)'
@@ -107,7 +117,7 @@ export function buildDrMiaSystemPrompt(params: {
     ? `Letzte Session: ${lastSession.date}, ${lastSession.duration}s, ${lastSession.completedAll ? 'vollständig abgeschlossen' : 'nicht vollständig abgeschlossen'}.`
     : 'Heute ist die erste Session.'
 
-  const fiveWhysInstruction = sessionNumber <= 3
+  const fiveWhysInstruction = enableFiveWhys && sessionNumber <= 3
     ? `
 FIVE WHYS (Session ${sessionNumber}/3): Frag empathisch nach der tieferen Motivation.
 Session 1: Was hat dich heute hergebracht? Was stört dich im Alltag am meisten?

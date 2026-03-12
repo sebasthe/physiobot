@@ -9,6 +9,7 @@ import type { TranscriptMessage } from '@/lib/mem0'
 export default function TrainingSessionPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [sessionId, setSessionId] = useState<string>()
+  const [sessionNumber, setSessionNumber] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
@@ -40,6 +41,12 @@ export default function TrainingSessionPage() {
       .single()
 
     if (!plan) { router.push('/dashboard'); return }
+
+    const { count } = await supabase
+      .from('sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    setSessionNumber((count ?? 0) + 1)
 
     const { data: session, error: sessionError } = await supabase
       .from('sessions')
@@ -89,6 +96,7 @@ export default function TrainingSessionPage() {
       exercises={exercises}
       onComplete={handleSessionComplete}
       sessionId={sessionId}
+      sessionNumber={sessionNumber}
     />
   )
 }

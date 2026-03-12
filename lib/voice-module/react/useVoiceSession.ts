@@ -89,7 +89,7 @@ export function useVoiceSession({
       session.destroy()
       sessionRef.current = null
     }
-  }, [config, stt, tts, llm, handleCommittedTranscript, handleError, handlePartialTranscript, handleToolCall])
+  }, [config, stt, tts, llm])
 
   async function sendMessage(text: string, context: TurnContext): Promise<string> {
     if (!sessionRef.current) {
