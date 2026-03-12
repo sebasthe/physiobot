@@ -9,6 +9,7 @@ const makeMockSTT = (): STTProvider => ({
   start: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn(),
   isActive: vi.fn(() => false),
+  onListeningStateChange: null,
   onPartialTranscript: null,
   onCommittedTranscript: null,
   onError: null,
@@ -78,6 +79,14 @@ describe('VoiceSession', () => {
     session.stopListening()
 
     expect(stt.stop).toHaveBeenCalled()
+  })
+
+  it('returns to idle when the STT provider reports listening stopped', async () => {
+    await session.startListening()
+
+    stt.onListeningStateChange?.(false)
+
+    expect(session.getState()).toBe('idle')
   })
 
   it('sendMessage processes through TurnManager', async () => {

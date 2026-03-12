@@ -1,3 +1,4 @@
+import { describeVoiceDebugText, recordVoiceDebugEvent } from '@/lib/voice-debug/client'
 import type { STTProvider } from './STTProvider'
 
 interface BrowserSTTConfig {
@@ -34,6 +35,7 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike
 
 export class BrowserSTT implements STTProvider {
+  onListeningStateChange: ((active: boolean) => void) | null = null
   onPartialTranscript: ((text: string) => void) | null = null
   onCommittedTranscript: ((text: string) => void) | null = null
   onError: ((error: Error) => void) | null = null
@@ -48,6 +50,7 @@ export class BrowserSTT implements STTProvider {
 
     const Recognition = resolveSpeechRecognition()
     if (!Recognition) {
+      recordVoiceDebugEvent('stt.browser.unavailable', {})
       throw new Error('SpeechRecognition not available')
     }
 
@@ -62,30 +65,41 @@ export class BrowserSTT implements STTProvider {
       if (!transcript) return
 
       if (result?.isFinal) {
+        recordVoiceDebugEvent('stt.browser.committed', describeVoiceDebugText(transcript))
         this.onCommittedTranscript?.(transcript)
         return
       }
 
+      recordVoiceDebugEvent('stt.browser.partial', describeVoiceDebugText(transcript))
       this.onPartialTranscript?.(transcript)
     }
 
     recognition.onerror = event => {
       this.active = false
+      this.onListeningStateChange?.(false)
+      recordVoiceDebugEvent('stt.browser.error', {
+        error: event.error ?? 'unknown',
+      })
       this.onError?.(new Error(`SpeechRecognition error: ${event.error ?? 'unknown'}`))
     }
 
     recognition.onend = () => {
       this.active = false
       this.recognition = null
+      recordVoiceDebugEvent('stt.browser.listening', { active: false })
+      this.onListeningStateChange?.(false)
     }
 
     recognition.start()
     this.recognition = recognition
     this.active = true
+    recordVoiceDebugEvent('stt.browser.listening', { active: true })
+    this.onListeningStateChange?.(true)
   }
 
   stop(): void {
     const recognition = this.recognition
+    const wasActive = this.active || Boolean(recognition)
     this.active = false
     this.recognition = null
 
@@ -93,6 +107,11 @@ export class BrowserSTT implements STTProvider {
       recognition?.abort?.()
     } catch {
       recognition?.stop?.()
+    }
+
+    if (wasActive) {
+      recordVoiceDebugEvent('stt.browser.stop', {})
+      this.onListeningStateChange?.(false)
     }
   }
 

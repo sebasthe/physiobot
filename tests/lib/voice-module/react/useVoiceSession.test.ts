@@ -10,6 +10,7 @@ const makeMockSTT = (): STTProvider => ({
   start: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn(),
   isActive: vi.fn(() => false),
+  onListeningStateChange: null,
   onPartialTranscript: null,
   onCommittedTranscript: null,
   onError: null,
@@ -63,5 +64,24 @@ describe('useVoiceSession', () => {
 
     expect(result.current.turnState).toBe('idle')
     expect(result.current.transcript.length).toBeGreaterThan(0)
+  })
+
+  it('does not destroy the session on a normal rerender', () => {
+    const stt = makeMockSTT()
+    const tts = makeMockTTS()
+    const llm = makeMockLLM()
+    const { rerender, unmount } = renderHook(() =>
+      useVoiceSession({ config, stt, tts, llm }),
+    )
+
+    rerender()
+
+    expect(stt.stop).not.toHaveBeenCalled()
+    expect(tts.stop).not.toHaveBeenCalled()
+
+    unmount()
+
+    expect(stt.stop).toHaveBeenCalledTimes(1)
+    expect(tts.stop).toHaveBeenCalledTimes(1)
   })
 })

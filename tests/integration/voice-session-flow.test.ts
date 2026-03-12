@@ -10,6 +10,7 @@ const nullSTT: STTProvider = {
   start: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn(),
   isActive: () => false,
+  onListeningStateChange: null,
   onPartialTranscript: null,
   onCommittedTranscript: null,
   onError: null,

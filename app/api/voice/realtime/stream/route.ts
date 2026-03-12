@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import type { ModeContext } from '@/lib/coach/types'
 import type { TranscriptMessage } from '@/lib/mem0'
 import { streamVoiceTurnOrchestration } from '@/lib/voice/server-orchestrator'
 import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
@@ -25,6 +26,8 @@ export async function POST(request: Request) {
     messages?: TranscriptMessage[]
     currentExercise?: { name?: string; description?: string; phase?: string }
     sessionNumber?: number
+    exercisePhase?: ModeContext['exercisePhase']
+    exerciseStatus?: ModeContext['exerciseStatus']
     tools?: ToolDefinition[]
     workoutState?: WorkoutState
   }
@@ -39,6 +42,8 @@ export async function POST(request: Request) {
             messages: body.messages,
             currentExercise: body.currentExercise,
             sessionNumber: body.sessionNumber,
+            exercisePhase: body.exercisePhase,
+            exerciseStatus: body.exerciseStatus,
             tools: body.tools,
             workoutState: body.workoutState,
           })) {

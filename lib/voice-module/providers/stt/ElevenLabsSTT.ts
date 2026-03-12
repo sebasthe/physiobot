@@ -1,3 +1,4 @@
+import { describeVoiceDebugText, recordVoiceDebugEvent } from '@/lib/voice-debug/client'
 import type { STTProvider } from './STTProvider'
 
 interface ElevenLabsSTTConfig {
@@ -20,6 +21,7 @@ type ScriptProcessorEvent = {
 }
 
 export class ElevenLabsSTT implements STTProvider {
+  onListeningStateChange: ((active: boolean) => void) | null = null
   onPartialTranscript: ((text: string) => void) | null = null
   onCommittedTranscript: ((text: string) => void) | null = null
   onError: ((error: Error) => void) | null = null
@@ -47,8 +49,13 @@ export class ElevenLabsSTT implements STTProvider {
 
   async start(): Promise<void> {
     this.stop()
+    recordVoiceDebugEvent('stt.elevenlabs.start.requested', {
+      language: this.config.language,
+      tokenEndpoint: this.config.tokenEndpoint,
+    })
 
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      recordVoiceDebugEvent('stt.elevenlabs.unavailable', {})
       throw new Error('Speech input is only available in the browser')
     }
 
@@ -66,6 +73,7 @@ export class ElevenLabsSTT implements STTProvider {
         } as MediaTrackConstraints,
       })
     } catch {
+      recordVoiceDebugEvent('stt.elevenlabs.microphone.denied', {})
       throw new Error('Mikrofonzugriff wurde verweigert oder ist nicht verfuegbar')
     }
 
@@ -106,6 +114,7 @@ export class ElevenLabsSTT implements STTProvider {
       if (!messageType) return
 
       if (messageType === 'partial_transcript') {
+        recordVoiceDebugEvent('stt.elevenlabs.partial', describeVoiceDebugText(payload.text ?? ''))
         this.onPartialTranscript?.(payload.text ?? '')
         return
       }
@@ -113,22 +122,29 @@ export class ElevenLabsSTT implements STTProvider {
       if (messageType === 'committed_transcript') {
         const transcript = (payload.text ?? '').trim()
         if (transcript) {
+          recordVoiceDebugEvent('stt.elevenlabs.committed', describeVoiceDebugText(transcript))
           this.onCommittedTranscript?.(transcript)
         }
         return
       }
 
       if (messageType.includes('error')) {
+        recordVoiceDebugEvent('stt.elevenlabs.stream.error', {
+          messageType,
+        })
         this.onError?.(new Error('Realtime-Transkription meldet einen Fehler.'))
       }
     }
 
     this.ws.onerror = () => {
+      recordVoiceDebugEvent('stt.elevenlabs.websocket.error', {})
       this.onError?.(new Error('Realtime-Verbindung konnte nicht geoeffnet werden'))
     }
 
     this.ws.onclose = () => {
       this.active = false
+      recordVoiceDebugEvent('stt.elevenlabs.listening', { active: false })
+      this.onListeningStateChange?.(false)
     }
 
     this.processorNode.onaudioprocess = event => {
@@ -153,10 +169,14 @@ export class ElevenLabsSTT implements STTProvider {
     }
 
     this.active = true
+    recordVoiceDebugEvent('stt.elevenlabs.listening', { active: true })
+    this.onListeningStateChange?.(true)
   }
 
   stop(): void {
+    const wasActive = this.active
     this.active = false
+    recordVoiceDebugEvent('stt.elevenlabs.stop', {})
 
     if (this.processorNode) {
       this.processorNode.onaudioprocess = null
@@ -188,19 +208,38 @@ export class ElevenLabsSTT implements STTProvider {
       this.ws.close()
       this.ws = null
     }
+
+    if (wasActive) {
+      recordVoiceDebugEvent('stt.elevenlabs.listening', { active: false })
+      this.onListeningStateChange?.(false)
+    }
   }
 
   private async fetchToken(): Promise<string> {
+    recordVoiceDebugEvent('stt.elevenlabs.token.fetch.start', {
+      endpoint: this.config.tokenEndpoint,
+    })
     const response = await fetch(this.config.tokenEndpoint, { method: 'POST' })
     if (!response.ok) {
+      recordVoiceDebugEvent('stt.elevenlabs.token.fetch.error', {
+        endpoint: this.config.tokenEndpoint,
+        status: response.status,
+      })
       throw new Error('Realtime token konnte nicht geladen werden')
     }
 
     const payload = await response.json() as { sttToken?: string }
     if (!payload.sttToken) {
+      recordVoiceDebugEvent('stt.elevenlabs.token.fetch.error', {
+        endpoint: this.config.tokenEndpoint,
+        message: 'Realtime token fehlt',
+      })
       throw new Error('Realtime token fehlt')
     }
 
+    recordVoiceDebugEvent('stt.elevenlabs.token.fetch.success', {
+      endpoint: this.config.tokenEndpoint,
+    })
     return payload.sttToken
   }
 
@@ -215,22 +254,28 @@ export class ElevenLabsSTT implements STTProvider {
     url.searchParams.set('min_speech_duration_ms', '100')
     url.searchParams.set('min_silence_duration_ms', '150')
 
+    recordVoiceDebugEvent('stt.elevenlabs.websocket.create', {
+      endpoint: url.toString().replace(token, 'redacted'),
+    })
     return new WebSocket(url.toString())
   }
 
   private awaitOpen(ws: WebSocket): Promise<void> {
     return new Promise((resolve, reject) => {
       const timeout = window.setTimeout(() => {
+        recordVoiceDebugEvent('stt.elevenlabs.websocket.timeout', {})
         reject(new Error('Verbindung zum Realtime-Transkriptionsdienst dauert zu lange'))
       }, 8000)
 
       ws.onopen = () => {
         window.clearTimeout(timeout)
+        recordVoiceDebugEvent('stt.elevenlabs.websocket.open', {})
         resolve()
       }
 
       ws.onerror = () => {
         window.clearTimeout(timeout)
+        recordVoiceDebugEvent('stt.elevenlabs.websocket.open-error', {})
         reject(new Error('Realtime-Verbindung konnte nicht geoeffnet werden'))
       }
     })

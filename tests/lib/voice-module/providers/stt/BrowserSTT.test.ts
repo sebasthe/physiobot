@@ -71,4 +71,17 @@ describe('BrowserSTT', () => {
     expect(stt.isActive()).toBe(false)
     expect(recognition?.abort).toHaveBeenCalled()
   })
+
+  it('notifies when listening stops', async () => {
+    const handler = vi.fn()
+    stt.onListeningStateChange = handler
+
+    await stt.start()
+
+    const recognition = (stt as unknown as { recognition: MockSpeechRecognition | null }).recognition
+    recognition?.onend?.()
+
+    expect(handler).toHaveBeenCalledWith(true)
+    expect(handler).toHaveBeenCalledWith(false)
+  })
 })

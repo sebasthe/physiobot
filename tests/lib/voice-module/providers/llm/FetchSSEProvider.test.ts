@@ -41,9 +41,22 @@ describe('FetchSSEProvider', () => {
         },
       ],
       metadata: {
-        currentExercise: { name: 'Squat' },
+        currentExercise: { name: 'Squat', phase: 'main' },
         sessionNumber: 2,
-        workoutState: { status: 'active' },
+        workoutState: {
+          status: 'active',
+          currentExerciseIndex: 0,
+          exercises: [
+            {
+              id: 'ex-1',
+              name: 'Squat',
+              phase: 'main',
+              type: 'reps',
+              completedSets: 0,
+              status: 'active',
+            },
+          ],
+        },
       },
     }
 
@@ -64,6 +77,13 @@ describe('FetchSSEProvider', () => {
         credentials: 'include',
       }),
     )
+
+    const [, request] = vi.mocked(globalThis.fetch).mock.calls[0] ?? []
+    expect(JSON.parse(String(request?.body))).toEqual(expect.objectContaining({
+      sessionNumber: 2,
+      exercisePhase: 'main',
+      exerciseStatus: 'active',
+    }))
   })
 
   it('throws when the endpoint responds without a body', async () => {

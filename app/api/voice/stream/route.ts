@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { readElevenLabsError, toElevenLabsErrorPayload } from '@/lib/voice/elevenlabs'
 
 const MAX_TEXT_LENGTH = 1200
 
@@ -44,8 +45,20 @@ export async function GET(request: Request) {
     }
   )
 
-  if (!response.ok || !response.body) {
-    return NextResponse.json({ error: 'ElevenLabs stream error' }, { status: 502 })
+  if (!response.ok) {
+    const upstreamError = await readElevenLabsError(response, 'ElevenLabs stream error')
+    console.error('ElevenLabs stream error', upstreamError)
+    return NextResponse.json(toElevenLabsErrorPayload(upstreamError), { status: upstreamError.status })
+  }
+
+  if (!response.body) {
+    const upstreamError = {
+      provider: 'elevenlabs' as const,
+      status: 502,
+      message: 'ElevenLabs returned no audio stream',
+    }
+    console.error('ElevenLabs stream error', upstreamError)
+    return NextResponse.json(toElevenLabsErrorPayload(upstreamError), { status: upstreamError.status })
   }
 
   return new NextResponse(response.body, {

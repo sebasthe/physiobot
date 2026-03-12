@@ -42,9 +42,17 @@ describe('BrowserTTS', () => {
     expect(mockSpeak).toHaveBeenCalled()
   })
 
-  it('stop cancels speech', () => {
+  it('does not cancel speech synthesis when idle', () => {
     tts.stop()
 
-    expect(mockCancel).toHaveBeenCalled()
+    expect(mockCancel).not.toHaveBeenCalled()
+  })
+
+  it('stop cancels active speech', () => {
+    ;(tts as unknown as { speaking: boolean }).speaking = true
+
+    tts.stop()
+
+    expect(mockCancel).toHaveBeenCalledTimes(1)
   })
 })
