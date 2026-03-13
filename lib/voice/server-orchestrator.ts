@@ -6,6 +6,11 @@ import { getModelForMode, selectCoachMode, shouldProbeMotivation } from '@/lib/c
 import type { CoachMode, CoachingMemorySnapshot, ModeContext } from '@/lib/coach/types'
 import { MemoryResolver } from '@/lib/memory/resolver'
 import type { SessionMemoryContext, TranscriptMessage } from '@/lib/mem0'
+import { buildPhysioPolicyPrompt } from '@/lib/physio/coach-policy'
+import { hasPhysioContext, loadPhysioContext } from '@/lib/physio/context-loader'
+import { classifySensitivity, type SensitivityResult } from '@/lib/physio/sensitivity-router'
+import { canExecuteTool } from '@/lib/privacy/hooks'
+import type { ConsentLevel } from '@/lib/privacy/types'
 import type { Language, UserPersonality } from '@/lib/types'
 import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
 
@@ -19,6 +24,8 @@ interface VoiceOrchestratorInput {
   tools?: ToolDefinition[]
   workoutState?: WorkoutState
   language?: Language
+  consent?: ConsentLevel
+  planId?: string | null
 }
 
 interface VoiceOrchestratorResult {
@@ -103,6 +110,7 @@ export async function* streamVoiceTurnOrchestration(
   let fullReply = ''
   let firstDeltaAt: number | null = null
   let sawToolCall = false
+  let blockedToolFallback: string | null = null
   let pendingToolUse: {
     name: string
     input: Record<string, unknown> | null
@@ -125,11 +133,16 @@ export async function* streamVoiceTurnOrchestration(
     }
 
     if (event?.type === 'content_block_stop' && pendingToolUse) {
-      sawToolCall = true
-      yield {
-        type: 'tool_call',
-        name: pendingToolUse.name,
-        input: parseToolInput(pendingToolUse.partialJson, pendingToolUse.input),
+      const parsedInput = parseToolInput(pendingToolUse.partialJson, pendingToolUse.input)
+      if (canExecuteTool(pendingToolUse.name, coachTurn.sensitivity.level)) {
+        sawToolCall = true
+        yield {
+          type: 'tool_call',
+          name: pendingToolUse.name,
+          input: parsedInput,
+        }
+      } else if (!blockedToolFallback) {
+        blockedToolFallback = buildBlockedToolFallback(input.language)
       }
       pendingToolUse = null
       continue
@@ -144,7 +157,11 @@ export async function* streamVoiceTurnOrchestration(
     }
   }
 
-  const reply = fullReply.trim()
+  let reply = fullReply.trim()
+  if (!reply && !sawToolCall && blockedToolFallback) {
+    reply = blockedToolFallback
+    yield { type: 'delta', text: reply }
+  }
   if (!reply && !sawToolCall) {
     throw new Error('No response text returned')
   }
@@ -163,14 +180,18 @@ async function buildVoiceOrchestrationPrompt(
     mode: CoachMode
     memorySnapshot: CoachingMemorySnapshot
     sessionNumber: number
+    sensitivity: SensitivityResult
   },
 ): Promise<VoiceOrchestrationPrompt> {
-  const [{ data: healthProfile }, { data: profile }, { data: personality }, { data: streakRow }, { data: sessions }] = await Promise.all([
+  const [{ data: healthProfile }, { data: profile }, { data: personality }, { data: streakRow }, { data: sessions }, physioContext] = await Promise.all([
     supabase.from('health_profiles').select('complaints').eq('user_id', input.userId).maybeSingle(),
     supabase.from('profiles').select('name').eq('id', input.userId).maybeSingle(),
     supabase.from('user_personality').select('coach_persona, feedback_style, language').eq('user_id', input.userId).maybeSingle(),
     supabase.from('streaks').select('current').eq('user_id', input.userId).maybeSingle(),
     supabase.from('sessions').select('created_at, completed_at').eq('user_id', input.userId).order('created_at', { ascending: false }).limit(1),
+    input.planId
+      ? loadPhysioContext(input.userId, input.planId).catch(() => null)
+      : Promise.resolve(null),
   ])
 
   const resolvedPersonality = mergeVoicePersonality(asVoicePersonality(personality), input.language)
@@ -186,6 +207,13 @@ async function buildVoiceOrchestrationPrompt(
       }
     : undefined
 
+  const physioPrompt = physioContext && hasPhysioContext(physioContext)
+    ? `\n\n${buildPhysioPolicyPrompt(physioContext)}`
+    : ''
+  const sensitivityPrompt = coachTurn.sensitivity.level !== 'normal'
+    ? `\n\n## Sensitivitaets-Routing\nAktuelles Sensitivitaetslevel: ${coachTurn.sensitivity.level}. Signale: ${coachTurn.sensitivity.signals.join(', ') || 'keine'}. Sicherheit hat Vorrang.`
+    : ''
+
   const system = `${buildDrMiaSystemPrompt({
     userName: profile?.name ?? 'du',
     streak: streakRow?.current ?? 0,
@@ -196,7 +224,7 @@ async function buildVoiceOrchestrationPrompt(
     lastSession,
     sessionNumber: coachTurn.sessionNumber,
     enableFiveWhys: false,
-  })}\n\n${buildCoachPolicyPrompt(coachTurn.mode, coachTurn.memorySnapshot)}`
+  })}\n\n${buildCoachPolicyPrompt(coachTurn.mode, coachTurn.memorySnapshot)}${physioPrompt}${sensitivityPrompt}`
 
   const contextMessage = input.currentExercise?.name
     ? outputLanguage === 'en'
@@ -235,13 +263,21 @@ async function resolveCoachTurn(input: VoiceOrchestratorInput): Promise<{
   model: string
   memorySnapshot: CoachingMemorySnapshot
   sessionNumber: number
+  sensitivity: SensitivityResult
 }> {
   const sessionNumber = input.sessionNumber ?? 1
-  const memorySnapshot = await memoryResolver.getSessionSnapshot(input.userId, sessionNumber)
+  const memorySnapshot = await memoryResolver.getSessionSnapshot(
+    input.userId,
+    sessionNumber,
+    input.consent ?? 'full',
+  )
   const modeContext = buildModeContext(input)
+  const sensitivity = classifySensitivity(modeContext.lastUtterance)
 
   let mode = selectCoachMode(modeContext)
-  if (
+  if (sensitivity.level !== 'normal') {
+    mode = 'safety'
+  } else if (
     mode !== 'safety'
     && shouldProbeMotivation({
       sessionCount: memorySnapshot.sessionCount,
@@ -257,6 +293,7 @@ async function resolveCoachTurn(input: VoiceOrchestratorInput): Promise<{
     model: getModelForMode(mode),
     memorySnapshot,
     sessionNumber,
+    sensitivity,
   }
 }
 
@@ -389,4 +426,12 @@ function mergeVoicePersonality(
     feedback_style: personality?.feedback_style ?? 'gentle',
     language: languageOverride ?? personality?.language ?? 'de',
   }
+}
+
+function buildBlockedToolFallback(language?: Language): string {
+  if (language === 'en') {
+    return "Let's pause workout changes for a moment and focus on the symptoms first."
+  }
+
+  return 'Wir aendern die Uebung gerade nicht weiter. Lass uns erst kurz auf die Beschwerden schauen.'
 }

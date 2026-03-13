@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveConsentLevel } from '@/lib/privacy/types'
 import { createClient } from '@/lib/supabase/server'
 import type { ModeContext } from '@/lib/coach/types'
 import type { TranscriptMessage } from '@/lib/mem0'
@@ -17,7 +18,14 @@ export async function POST(request: Request) {
     exercisePhase?: ModeContext['exercisePhase']
     exerciseStatus?: ModeContext['exerciseStatus']
     language?: Language
+    planId?: string | null
   }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('privacy_consent')
+    .eq('id', user.id)
+    .maybeSingle()
 
   try {
     const result = await runVoiceTurnOrchestration(supabase, {
@@ -28,6 +36,8 @@ export async function POST(request: Request) {
       exercisePhase: body.exercisePhase,
       exerciseStatus: body.exerciseStatus,
       language: body.language,
+      consent: resolveConsentLevel(profile?.privacy_consent),
+      planId: typeof body.planId === 'string' ? body.planId : null,
     })
 
     return NextResponse.json({

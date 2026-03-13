@@ -2,6 +2,7 @@ export type MotivationStyle = 'goal_oriented' | 'pain_avoidance' | 'mixed'
 export type FeedbackStyle = 'direct' | 'gentle' | 'energetic'
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 export type Language = 'de' | 'en'
+export type PrivacyConsent = 'full' | 'minimal' | 'none'
 
 export interface UserPersonality {
   motivation_style: MotivationStyle
@@ -32,11 +33,26 @@ export interface TrainingPlan {
   id?: string
   exercises: Exercise[]
   source: 'ai' | 'physio'
+  contraindications?: string[]
+  therapist_notes?: string | null
+  exercise_modifications?: Record<string, string>
+  mobility_baseline?: Record<string, number>
+  plan_type?: 'fitness' | 'physio'
+}
+
+export interface UserProfile {
+  id: string
+  role: 'patient' | 'physio'
+  active_plan_id: string | null
+  privacy_consent?: PrivacyConsent
+  name?: string | null
+  address?: string | null
+  created_at?: string
 }
 
 export interface SessionFeedback {
   exercise_id: string
-  difficulty: 'too_easy' | 'right' | 'too_hard' | 'painful'
+  difficulty: 'well_tolerated' | 'manageable' | 'too_intense' | 'painful'
   notes?: string
 }
 

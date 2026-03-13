@@ -1,19 +1,35 @@
 import MemoryClient from 'mem0ai'
 import type { CoachingMemorySnapshot } from '@/lib/coach/types'
-
-const client = new MemoryClient({
-  apiKey: process.env.MEM0_API_KEY ?? '',
-})
+import { logPrivacyAuditEvent } from '@/lib/privacy/audit'
+import { classifyMemory } from '@/lib/privacy/classifier'
+import { canRetrieveMemory } from '@/lib/privacy/hooks'
+import { DataClass, type ConsentLevel, isValidDataClass } from '@/lib/privacy/types'
 
 interface MemorySearchResult {
   memory?: string
+  metadata?: Record<string, unknown> | null
 }
+
+interface Mem0Client {
+  search: (
+    query: string,
+    options: { user_id: string; limit: number },
+  ) => Promise<MemorySearchResult[]>
+}
+
+const client = new MemoryClient({
+  apiKey: process.env.MEM0_API_KEY ?? '',
+}) as unknown as Mem0Client
 
 export class MemoryResolver {
   private cache = new Map<string, CoachingMemorySnapshot>()
 
-  async getSessionSnapshot(userId: string, sessionCount: number): Promise<CoachingMemorySnapshot> {
-    const cacheKey = `${userId}:${sessionCount}`
+  async getSessionSnapshot(
+    userId: string,
+    sessionCount: number,
+    consent: ConsentLevel = 'full',
+  ): Promise<CoachingMemorySnapshot> {
+    const cacheKey = `${userId}:${sessionCount}:${consent}`
     const cached = this.cache.get(cacheKey)
     if (cached) {
       return cached
@@ -26,11 +42,33 @@ export class MemoryResolver {
       client.search('Lebenskontext, Beruf und Familie', { user_id: userId, limit: 3 }).catch(() => []),
     ])
 
+    const filteredMotivation = this.filterResults(motivationResults, 'motivation_hints', consent)
+    const filteredPersonality = this.filterResults(personalityResults, 'personality_preferences', consent)
+    const filteredTraining = this.filterResults(trainingResults, 'training_patterns', consent)
+    const filteredLife = this.filterResults(lifeResults, 'life_context', consent)
+
+    const classDCount = filteredMotivation.classDCount
+      + filteredPersonality.classDCount
+      + filteredTraining.classDCount
+      + filteredLife.classDCount
+    if (classDCount > 0) {
+      void logPrivacyAuditEvent({
+        userId,
+        eventType: 'class_d_read',
+        dataClass: DataClass.MedicalRehab,
+        payload: {
+          action: 'retrieve',
+          data_class: DataClass.MedicalRehab,
+          memory_count: classDCount,
+        },
+      }).catch(() => undefined)
+    }
+
     const snapshot: CoachingMemorySnapshot = {
-      kernMotivation: this.extractFirst(motivationResults),
-      personalityPrefs: this.parsePersonality(personalityResults),
-      trainingPatterns: this.parseTraining(trainingResults),
-      lifeContext: this.extractAll(lifeResults),
+      kernMotivation: this.extractFirst(filteredMotivation.results),
+      personalityPrefs: this.parsePersonality(filteredPersonality.results),
+      trainingPatterns: this.parseTraining(filteredTraining.results),
+      lifeContext: this.extractAll(filteredLife.results),
       sessionCount,
     }
 
@@ -57,12 +95,12 @@ export class MemoryResolver {
       return null
     }
 
-    return first.replace(/^[^:]+:\s*/, '').trim()
+    return this.normalizeMemoryText(first)
   }
 
   private extractAll(results: MemorySearchResult[]): string[] {
     return results
-      .map(result => result.memory?.trim() ?? '')
+      .map(result => this.normalizeMemoryText(result.memory?.trim() ?? ''))
       .filter(Boolean)
   }
 
@@ -93,8 +131,48 @@ export class MemoryResolver {
     }
   }
 
+  private normalizeMemoryText(text: string): string {
+    return text.replace(/^[^:]+:\s*/, '').trim()
+  }
+
   private extractKeywords(text: string, keywords: string[]): string[] {
     const lower = text.toLowerCase()
     return keywords.filter(keyword => lower.includes(keyword.toLowerCase()))
+  }
+
+  private filterResults(
+    results: MemorySearchResult[],
+    category: 'motivation_hints' | 'personality_preferences' | 'training_patterns' | 'life_context',
+    consent: ConsentLevel,
+  ): { results: MemorySearchResult[]; classDCount: number } {
+    let classDCount = 0
+    const filtered = results.filter(result => {
+      const memory = result.memory?.trim()
+      if (!memory) {
+        return false
+      }
+
+      const dataClass = this.resolveDataClass(category, result)
+      const allowed = canRetrieveMemory({ dataClass, consent })
+      if (allowed && dataClass === DataClass.MedicalRehab) {
+        classDCount += 1
+      }
+
+      return allowed
+    })
+
+    return { results: filtered, classDCount }
+  }
+
+  private resolveDataClass(
+    category: 'motivation_hints' | 'personality_preferences' | 'training_patterns' | 'life_context',
+    result: MemorySearchResult,
+  ): DataClass {
+    const dataClassValue = result.metadata?.data_class
+    if (isValidDataClass(dataClassValue)) {
+      return dataClassValue
+    }
+
+    return classifyMemory(category, result.memory ?? '')
   }
 }

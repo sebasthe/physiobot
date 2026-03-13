@@ -1,11 +1,10 @@
-// components/training/aura/ShaderCanvas.tsx
 'use client'
 
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { VERTEX_SHADER, FRAGMENT_SHADER, UNIFORM_DEFS, type AuraUniforms } from './aura-shader'
+import { VERTEX_SHADER, FRAGMENT_SHADER, UNIFORM_DEFS, type GlowUniforms } from './shader'
 
 interface ShaderCanvasProps {
-  uniforms: Partial<AuraUniforms>
+  uniforms: Partial<GlowUniforms>
   className?: string
   style?: CSSProperties
 }
@@ -84,7 +83,7 @@ export default function ShaderCanvas({ uniforms, className, style }: ShaderCanva
       antialias: false,
     })
     if (!gl) {
-      console.warn('WebGL not available, aura visualizer disabled')
+      console.warn('WebGL not available, voice glow disabled')
       return
     }
 

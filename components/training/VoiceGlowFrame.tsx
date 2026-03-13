@@ -3,12 +3,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { TurnState } from '@/lib/voice-module'
-import ShaderCanvas from './aura/ShaderCanvas'
-import { useAuraAnimation } from './aura/useAuraAnimation'
+import ShaderCanvas from './voice-glow/ShaderCanvas'
+import { useGlowAnimation } from './voice-glow/useGlowAnimation'
 
-/* ─── public API (unchanged) ─── */
-
-interface VoiceAuraTimerFrameProps {
+interface VoiceGlowFrameProps {
   state: TurnState
   active: boolean
   intensity?: number
@@ -16,12 +14,8 @@ interface VoiceAuraTimerFrameProps {
   children: ReactNode
 }
 
-/* ─── constants ─── */
-
 const FALLBACK_RING_CLASSNAME =
   'border-[8px] border-[rgba(110,235,220,0.86)] shadow-[0_0_48px_rgba(66,209,192,0.12)]'
-
-/* ─── hooks ─── */
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false)
@@ -42,22 +36,20 @@ function usePrefersReducedMotion() {
   return reduced
 }
 
-/* ─── component ─── */
-
-export default function VoiceAuraTimerFrame({
+export default function VoiceGlowFrame({
   state,
   active,
   intensity,
   className,
   children,
-}: VoiceAuraTimerFrameProps) {
+}: VoiceGlowFrameProps) {
   const prefersReducedMotion = usePrefersReducedMotion()
-  const uniforms = useAuraAnimation(state, active && !prefersReducedMotion, intensity)
+  const uniforms = useGlowAnimation(state, active && !prefersReducedMotion, intensity)
 
   return (
     <div
       className={cn('relative flex items-center justify-center', className)}
-      data-testid={active ? 'voice-aura-frame' : 'timer-ring-fallback'}
+      data-testid={active ? 'voice-glow-frame' : 'timer-ring-fallback'}
       data-voice-state={state}
     >
       {active && !prefersReducedMotion ? (

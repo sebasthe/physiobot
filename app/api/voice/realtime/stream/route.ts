@@ -1,3 +1,4 @@
+import { resolveConsentLevel } from '@/lib/privacy/types'
 import { createClient } from '@/lib/supabase/server'
 import type { ModeContext } from '@/lib/coach/types'
 import type { TranscriptMessage } from '@/lib/mem0'
@@ -32,7 +33,14 @@ export async function POST(request: Request) {
     tools?: ToolDefinition[]
     workoutState?: WorkoutState
     language?: Language
+    planId?: string | null
   }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('privacy_consent')
+    .eq('id', user.id)
+    .maybeSingle()
 
   const stream = new ReadableStream({
     start(controller) {
@@ -49,6 +57,8 @@ export async function POST(request: Request) {
             tools: body.tools,
             workoutState: body.workoutState,
             language: body.language,
+            consent: resolveConsentLevel(profile?.privacy_consent),
+            planId: typeof body.planId === 'string' ? body.planId : null,
           })) {
             if (chunk.type === 'delta') {
               controller.enqueue(encoder.encode(sseData({ type: 'delta', text: chunk.text })))

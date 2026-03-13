@@ -40,6 +40,7 @@ export class FetchSSEProvider implements LLMProvider {
         tools: context.tools ?? [],
         workoutState: context.metadata?.workoutState ?? null,
         language: resolveLanguage(context.metadata?.language),
+        planId: resolvePlanId(context.metadata?.planId),
       }),
     })
 
@@ -178,4 +179,8 @@ function resolveLanguage(value: unknown): 'de' | 'en' | undefined {
   }
 
   return undefined
+}
+
+function resolvePlanId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }

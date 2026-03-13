@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mockTransformersEnv = {
+  backends: {
+    onnx: {} as Record<string, unknown>,
+  },
+}
+
 const mockGenerate = vi.fn().mockResolvedValue({
   toBlob: () => Promise.resolve(new Blob(['audio'], { type: 'audio/wav' })),
 })
@@ -14,6 +20,10 @@ vi.mock('kokoro-js', () => ({
   KokoroTTS: {
     from_pretrained: mockFromPretrained,
   },
+}))
+
+vi.mock('@huggingface/transformers', () => ({
+  env: mockTransformersEnv,
 }))
 
 vi.stubGlobal('Audio', vi.fn().mockImplementation(() => ({
@@ -36,6 +46,7 @@ describe('KokoroTTS', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockTransformersEnv.backends.onnx = {}
     tts = new KokoroTTS({ voice: 'af_bella', dtype: 'q8' })
   })
 
@@ -61,6 +72,10 @@ describe('KokoroTTS', () => {
     await promise
 
     expect(mockFromPretrained).toHaveBeenCalledTimes(1)
+    expect(mockFromPretrained).toHaveBeenCalledWith(
+      'onnx-community/Kokoro-82M-v1.0-ONNX',
+      expect.objectContaining({ device: 'wasm' }),
+    )
   })
 
   it('reuses the model on subsequent speaks', async () => {
@@ -109,6 +124,18 @@ describe('KokoroTTS', () => {
 
     expect(onLoadingChange).toHaveBeenNthCalledWith(1, true)
     expect(onLoadingChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('configures ONNX runtime logging before loading the model', async () => {
+    const promise = tts.speak('Hallo')
+    const AudioCtor = globalThis.Audio as unknown as ReturnType<typeof vi.fn>
+    await vi.waitFor(() => {
+      expect(AudioCtor).toHaveBeenCalled()
+    })
+    AudioCtor.mock.results[0]?.value?.onended?.()
+    await promise
+
+    expect(mockTransformersEnv.backends.onnx.logLevel).toBe('error')
   })
 
   it('stop cancels current audio', () => {

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { classifyTelemetryEvent } from '@/lib/privacy/classifier'
+import { shouldRedactLog } from '@/lib/privacy/hooks'
 import { createClient } from '@/lib/supabase/server'
 
 const ALLOWED_EVENT_TYPES = new Set([
@@ -34,12 +36,18 @@ export async function POST(request: Request) {
 
   const payload = body.payload && typeof body.payload === 'object' ? body.payload : {}
   const sessionId = typeof body.sessionId === 'string' && body.sessionId.length > 0 ? body.sessionId : null
+  const dataClass = classifyTelemetryEvent(body.eventType)
+  const redactedEvent = shouldRedactLog({
+    event_type: body.eventType,
+    payload,
+  }, dataClass)
 
   const { error } = await supabase.from('voice_telemetry_events').insert({
     user_id: user.id,
     session_id: sessionId,
-    event_type: body.eventType,
-    payload,
+    event_type: redactedEvent.event_type,
+    payload: redactedEvent.payload,
+    data_class: dataClass,
   })
 
   if (error) {

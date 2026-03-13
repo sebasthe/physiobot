@@ -38,9 +38,10 @@ const makeState = (overrides?: Partial<WorkoutState>): WorkoutState => ({
 
 describe('WORKOUT_TOOLS', () => {
   it('exports tool definitions for Claude', () => {
-    expect(WORKOUT_TOOLS).toHaveLength(7)
+    expect(WORKOUT_TOOLS).toHaveLength(8)
     expect(WORKOUT_TOOLS.map(tool => tool.name)).toContain('next_exercise')
     expect(WORKOUT_TOOLS.map(tool => tool.name)).toContain('pause_workout')
+    expect(WORKOUT_TOOLS.map(tool => tool.name)).toContain('log_pain')
   })
 })
 

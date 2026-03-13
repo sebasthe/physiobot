@@ -2,10 +2,21 @@ import MemoryClient from 'mem0ai'
 import { anthropic } from '@/lib/claude/client'
 import { extractJson } from '@/lib/claude/extract-json'
 import type { ExtractedSessionInsights } from '@/lib/coach/types'
+import { logPrivacyAuditEvent } from '@/lib/privacy/audit'
+import { classifyMemory } from '@/lib/privacy/classifier'
+import { canStoreMemory } from '@/lib/privacy/hooks'
+import { DataClass, type ConsentLevel } from '@/lib/privacy/types'
+
+interface Mem0Client {
+  add: (
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    options: { user_id: string; metadata?: Record<string, unknown> },
+  ) => Promise<unknown>
+}
 
 const mem0 = new MemoryClient({
   apiKey: process.env.MEM0_API_KEY ?? '',
-})
+}) as unknown as Mem0Client
 
 const EXTRACTION_PROMPT = `Analysiere das folgende Trainingsgespraech und extrahiere strukturierte Erkenntnisse.
 
@@ -47,6 +58,8 @@ function normalizeInsights(value: Partial<ExtractedSessionInsights> | null | und
 export async function extractSessionInsights(
   userId: string,
   transcript: Array<{ role: string; content: string }>,
+  consent: ConsentLevel = 'full',
+  options?: { sessionId?: string | null },
 ): Promise<ExtractedSessionInsights> {
   const conversationText = transcript
     .map(message => `${message.role === 'user' ? 'Nutzer' : 'Coach'}: ${message.content}`)
@@ -66,23 +79,95 @@ export async function extractSessionInsights(
       : null,
   )
 
-  const memoryEntries = [
-    insights.motivation_hints.length > 0 ? `Motivation: ${insights.motivation_hints.join(', ')}` : null,
+  const memoryEntries = buildMemoryEntries(insights)
+
+  await Promise.all(memoryEntries.map(async ({ category, content }) => {
+    const dataClass = classifyMemory(category, content)
+    if (!canStoreMemory({ dataClass, consent })) {
+      return
+    }
+
+    if (dataClass === DataClass.MedicalRehab) {
+      await logPrivacyAuditEvent({
+        userId,
+        sessionId: options?.sessionId ?? null,
+        eventType: 'class_d_write',
+        dataClass,
+        payload: {
+          table: 'mem0',
+          action: 'insert',
+          data_class: DataClass.MedicalRehab,
+          memory_category: category,
+        },
+      }).catch(() => undefined)
+    }
+
+    await mem0.add(
+      [{ role: 'user', content }],
+      {
+        user_id: userId,
+        metadata: {
+          source: 'session_extraction',
+          category,
+          data_class: dataClass,
+        },
+      },
+    ).catch(() => undefined)
+  }))
+
+  return insights
+}
+
+function buildMemoryEntries(insights: ExtractedSessionInsights): Array<{
+  category: 'motivation_hints' | 'personality_preferences' | 'training_patterns' | 'life_context'
+  content: string
+}> {
+  const entries: Array<{
+    category: 'motivation_hints' | 'personality_preferences' | 'training_patterns' | 'life_context'
+    content: string
+  }> = []
+
+  if (insights.motivation_hints.length > 0) {
+    entries.push({
+      category: 'motivation_hints',
+      content: `Motivation: ${insights.motivation_hints.join(', ')}`,
+    })
+  }
+
+  const hasCustomPersonality = insights.personality_preferences.communicationStyle !== 'einfuehlsam'
+    || insights.personality_preferences.encouragementType !== 'supportive'
+  if (hasCustomPersonality) {
+    entries.push({
+      category: 'personality_preferences',
+      content: `Kommunikationsstil: ${insights.personality_preferences.communicationStyle}; Ermutigung: ${insights.personality_preferences.encouragementType}`,
+    })
+  }
+
+  const trainingSegments = [
     insights.training_patterns.knownPainPoints.length > 0
       ? `Schmerzpunkte: ${insights.training_patterns.knownPainPoints.join(', ')}`
       : null,
-    insights.life_context.length > 0 ? `Lebenskontext: ${insights.life_context.join(', ')}` : null,
-  ].filter((entry): entry is string => Boolean(entry))
+    insights.training_patterns.preferredExercises.length > 0
+      ? `Bevorzugte Uebungen: ${insights.training_patterns.preferredExercises.join(', ')}`
+      : null,
+    insights.training_patterns.fatigueSignals.length > 0
+      ? `Ermuedungssignale: ${insights.training_patterns.fatigueSignals.join(', ')}`
+      : null,
+  ].filter((value): value is string => Boolean(value))
 
-  await Promise.all(memoryEntries.map(entry =>
-    mem0.add(
-      [{ role: 'user', content: entry }],
-      {
-        user_id: userId,
-        metadata: { source: 'session_extraction' },
-      },
-    ).catch(() => undefined),
-  ))
+  if (trainingSegments.length > 0) {
+    entries.push({
+      category: 'training_patterns',
+      content: `Trainingsmuster: ${trainingSegments.join(' | ')}`,
+    })
+  }
 
-  return insights
+  if (insights.life_context.length > 0) {
+    entries.push({
+      category: 'life_context',
+      content: `Lebenskontext: ${insights.life_context.join(', ')}`,
+    })
+  }
+
+  return entries
 }

@@ -6,6 +6,7 @@ type KokoroGenerateOptions = NonNullable<Parameters<KokoroEngineModel['generate'
 type KokoroVoice = NonNullable<KokoroGenerateOptions['voice']>
 type KokoroDType = 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16'
 type KokoroDevice = 'wasm' | 'webgpu' | 'cpu' | null
+type KokoroOrtLogLevel = 'verbose' | 'info' | 'warning' | 'error' | 'fatal'
 
 interface KokoroLoadStrategy {
   device: KokoroDevice
@@ -18,6 +19,7 @@ interface KokoroTTSConfig {
   modelId?: string
   device?: KokoroDevice | 'auto'
   webgpuDtype?: KokoroDType
+  ortLogLevel?: KokoroOrtLogLevel
   onLoadingChange?: (loading: boolean) => void
 }
 
@@ -32,6 +34,7 @@ export class KokoroTTS implements TTSProvider {
   private currentObjectUrl: string | null = null
   private speaking = false
   private requestId = 0
+  private onnxRuntimeConfigured = false
 
   constructor(config: KokoroTTSConfig = {}) {
     this.config = {
@@ -39,8 +42,9 @@ export class KokoroTTS implements TTSProvider {
       voice: config.voice ?? 'af_bella',
       dtype: config.dtype ?? 'q4',
       modelId: config.modelId ?? 'onnx-community/Kokoro-82M-v1.0-ONNX',
-      device: config.device ?? 'auto',
+      device: config.device ?? 'wasm',
       webgpuDtype: config.webgpuDtype ?? 'fp32',
+      ortLogLevel: config.ortLogLevel ?? 'error',
       onLoadingChange: config.onLoadingChange ?? (() => undefined),
     }
   }
@@ -120,8 +124,10 @@ export class KokoroTTS implements TTSProvider {
         modelId: this.config.modelId,
         dtype: this.config.dtype,
         device: this.config.device ?? 'auto',
+        ortLogLevel: this.config.ortLogLevel,
       })
       this.loading = (async () => {
+        await this.configureOnnxRuntime()
         const { KokoroTTS: KokoroEngine } = await import('kokoro-js')
         const strategies = await this.resolveLoadStrategies()
         let lastError: unknown = null
@@ -197,6 +203,26 @@ export class KokoroTTS implements TTSProvider {
     })
 
     return strategies
+  }
+
+  private async configureOnnxRuntime(): Promise<void> {
+    if (this.onnxRuntimeConfigured) {
+      return
+    }
+
+    this.onnxRuntimeConfigured = true
+
+    try {
+      const { env } = await import('@huggingface/transformers')
+      env.backends.onnx.logLevel = this.config.ortLogLevel
+      recordVoiceDebugEvent('tts.kokoro.onnx.configured', {
+        logLevel: this.config.ortLogLevel,
+      })
+    } catch (error) {
+      recordVoiceDebugEvent('tts.kokoro.onnx.config.error', {
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   private async supportsWebGpu(): Promise<boolean> {
