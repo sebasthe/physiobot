@@ -42,6 +42,7 @@ export class BrowserSTT implements STTProvider {
 
   private recognition: SpeechRecognitionLike | null = null
   private active = false
+  private suppressNextError = false
 
   constructor(private config: BrowserSTTConfig) {}
 
@@ -55,6 +56,7 @@ export class BrowserSTT implements STTProvider {
     }
 
     const recognition = new Recognition()
+    this.suppressNextError = false
     recognition.lang = this.config.language
     recognition.continuous = false
     recognition.interimResults = true
@@ -75,12 +77,23 @@ export class BrowserSTT implements STTProvider {
     }
 
     recognition.onerror = event => {
+      const errorCode = normalizeSpeechRecognitionError(event.error)
       this.active = false
+      this.recognition = null
       this.onListeningStateChange?.(false)
+      if (shouldSuppressSpeechRecognitionError(errorCode, this.suppressNextError)) {
+        recordVoiceDebugEvent('stt.browser.error.suppressed', {
+          error: errorCode ?? 'unknown',
+          intentional: this.suppressNextError,
+        })
+        this.suppressNextError = false
+        return
+      }
+
       recordVoiceDebugEvent('stt.browser.error', {
-        error: event.error ?? 'unknown',
+        error: errorCode ?? 'unknown',
       })
-      this.onError?.(new Error(`SpeechRecognition error: ${event.error ?? 'unknown'}`))
+      this.onError?.(new Error(`SpeechRecognition error: ${errorCode ?? 'unknown'}`))
     }
 
     recognition.onend = () => {
@@ -102,6 +115,7 @@ export class BrowserSTT implements STTProvider {
     const wasActive = this.active || Boolean(recognition)
     this.active = false
     this.recognition = null
+    this.suppressNextError = true
 
     try {
       recognition?.abort?.()
@@ -118,6 +132,22 @@ export class BrowserSTT implements STTProvider {
   isActive(): boolean {
     return this.active
   }
+}
+
+function normalizeSpeechRecognitionError(error: string | undefined): string | null {
+  const normalized = error?.trim()
+  return normalized ? normalized : null
+}
+
+function shouldSuppressSpeechRecognitionError(
+  errorCode: string | null,
+  intentionalStop: boolean,
+): boolean {
+  if (intentionalStop) {
+    return true
+  }
+
+  return errorCode === null || errorCode === 'aborted' || errorCode === 'no-speech'
 }
 
 function resolveSpeechRecognition(): SpeechRecognitionCtor | null {

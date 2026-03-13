@@ -18,6 +18,8 @@ interface TurnManagerConfig {
 const DEFAULT_TIMEOUT_MS = 5_000
 const DEFAULT_MAX_QUEUE_DEPTH = 10
 const TIMEOUT_FALLBACK_MESSAGE = 'Moment bitte, ich bin gleich wieder da.'
+const EARLY_TTS_CHUNK_TARGET_LENGTH = 96
+const EARLY_TTS_CHUNK_MIN_LENGTH = 48
 
 export class TurnManager {
   private interrupted = false
@@ -144,18 +146,19 @@ export class TurnManager {
       })
     }
 
-    const queueCompleteSentences = () => {
-      const sentences = buffer.split(/(?<=[.!?…])\s+/)
-      if (sentences.length <= 1) return
+    const queueSpeakableChunks = (force = false) => {
+      while (buffer.trim()) {
+        const boundary = findSpeechBoundary(buffer, force)
+        if (boundary <= 0) {
+          return
+        }
 
-      for (let index = 0; index < sentences.length - 1; index += 1) {
-        const sentence = sentences[index]?.trim()
-        if (sentence) {
-          enqueueSpeech(sentence)
+        const chunk = buffer.slice(0, boundary).trim()
+        buffer = buffer.slice(boundary).trimStart()
+        if (chunk) {
+          enqueueSpeech(chunk)
         }
       }
-
-      buffer = sentences[sentences.length - 1] ?? ''
     }
 
     try {
@@ -172,7 +175,7 @@ export class TurnManager {
           }
           fullReply += chunk.text
           buffer += chunk.text
-          queueCompleteSentences()
+          queueSpeakableChunks()
           ensureSpeechQueue()
           continue
         }
@@ -187,8 +190,7 @@ export class TurnManager {
       }
 
       if (buffer.trim() && !this.interrupted) {
-        enqueueSpeech(buffer)
-        buffer = ''
+        queueSpeakableChunks(true)
         ensureSpeechQueue()
       }
 
@@ -315,4 +317,35 @@ function isTimeoutError(error: Error): error is TimeoutTurnError {
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
+}
+
+function findSpeechBoundary(buffer: string, force: boolean): number {
+  const sentenceBoundary = findRegexBoundary(buffer, /[.!?…](?=\s|$)/)
+  if (sentenceBoundary > 0) {
+    return sentenceBoundary
+  }
+
+  const clauseBoundary = findRegexBoundary(buffer, /[,;:](?=\s|$)/)
+  if (clauseBoundary >= EARLY_TTS_CHUNK_MIN_LENGTH) {
+    return clauseBoundary
+  }
+
+  if (!force && buffer.length >= EARLY_TTS_CHUNK_TARGET_LENGTH) {
+    const searchWindow = buffer.slice(0, EARLY_TTS_CHUNK_TARGET_LENGTH)
+    const whitespaceBoundary = searchWindow.lastIndexOf(' ')
+    if (whitespaceBoundary >= EARLY_TTS_CHUNK_MIN_LENGTH) {
+      return whitespaceBoundary
+    }
+  }
+
+  return force ? buffer.length : -1
+}
+
+function findRegexBoundary(buffer: string, pattern: RegExp): number {
+  const match = pattern.exec(buffer)
+  if (!match || typeof match.index !== 'number') {
+    return -1
+  }
+
+  return match.index + match[0].length
 }

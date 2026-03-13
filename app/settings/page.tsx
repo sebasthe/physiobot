@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import TransitionLink from '@/components/navigation/TransitionLink'
 import { createClient } from '@/lib/supabase/server'
-import type { Language, Schedule } from '@/lib/types'
+import type { Language, PrivacyConsent, Schedule } from '@/lib/types'
 import SettingsClient from './SettingsClient'
 
 interface PhysioInfo {
@@ -13,6 +13,7 @@ interface PhysioInfo {
 interface ProfileWithActivePlan {
   name: string | null
   active_plan_id: string | null
+  privacy_consent?: PrivacyConsent | null
   training_plans?: {
     source: 'ai' | 'physio'
     created_by: string | null
@@ -27,7 +28,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, { data: schedule }, { data: relation }, { data: personality }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('name, active_plan_id, training_plans!fk_active_plan(source, created_by)')
+      .select('name, active_plan_id, privacy_consent, training_plans!fk_active_plan(source, created_by)')
       .eq('id', user.id)
       .single(),
     supabase.from('schedules').select('days, notify_time, timezone').eq('user_id', user.id).maybeSingle(),
@@ -92,6 +93,7 @@ export default async function SettingsPage() {
           initialName={typedProfile.name ?? ''}
           initialSchedule={(schedule as Schedule | null) ?? null}
           initialLanguage={(personality?.language as Language) ?? 'de'}
+          initialPrivacyConsent={typedProfile.privacy_consent ?? 'full'}
           physioInfo={physioInfo}
           isSelfCreatedPlan={isSelfCreatedPlan}
         />

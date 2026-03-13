@@ -41,6 +41,28 @@ export const WORKOUT_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'log_pain',
+    description: 'Log a pain report from the user during exercise. Use when the user reports pain.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        location: {
+          type: 'string',
+          description: 'Body location of the pain, e.g. Knie rechts or Schulter links',
+        },
+        intensity: {
+          type: 'number',
+          description: 'Pain intensity from 1 to 10',
+        },
+        type: {
+          type: 'string',
+          description: 'Pain type such as stechend, ziehend, dumpf, or brennend',
+        },
+      },
+      required: ['location', 'intensity', 'type'],
+    },
+  },
+  {
     name: 'end_session',
     description: 'End the workout session early',
     input_schema: { type: 'object', properties: {} },
@@ -104,6 +126,8 @@ export function validateToolCall(
       if (current.status !== 'active') {
         return { valid: false, reason: 'Current exercise is not active' }
       }
+      return { valid: true }
+    case 'log_pain':
       return { valid: true }
     case 'end_session':
       return { valid: true }

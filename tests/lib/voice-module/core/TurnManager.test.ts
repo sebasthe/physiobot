@@ -97,4 +97,18 @@ describe('TurnManager', () => {
 
     expect((tts.speak as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1)
   })
+
+  it('starts speaking before sentence punctuation once the buffer gets long enough', async () => {
+    const longStreamingLLM = makeMockLLM([
+      { type: 'delta', text: 'Keep your shoulders relaxed and let your breath settle into a steady rhythm while ' },
+      { type: 'delta', text: 'you continue moving with control and stay tall through the spine' },
+      { type: 'done', reply: 'Keep your shoulders relaxed and let your breath settle into a steady rhythm while you continue moving with control and stay tall through the spine', llmLatencyMs: 50, totalLatencyMs: 100 },
+    ])
+    turn = new TurnManager({ events, tts, llm: longStreamingLLM })
+
+    await turn.handleUserMessage('Test', defaultContext, [])
+
+    expect(tts.speak).toHaveBeenCalled()
+    expect((tts.speak as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toContain('Keep your shoulders relaxed')
+  })
 })

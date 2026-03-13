@@ -12,11 +12,19 @@ describe('buildFeedbackPrompt', () => {
     expect(prompt).toContain('Knie schmerzt')
   })
 
-  it('includes too_hard exercises', () => {
+  it('includes too_intense exercises', () => {
     const feedback: SessionFeedback[] = [
-      { exercise_id: '2', difficulty: 'too_hard' },
+      { exercise_id: '2', difficulty: 'too_intense' },
     ]
     const prompt = buildFeedbackPrompt(feedback)
-    expect(prompt).toContain('too_hard')
+    expect(prompt).toContain('too_intense')
+  })
+
+  it('includes well_tolerated exercises', () => {
+    const feedback: SessionFeedback[] = [
+      { exercise_id: '3', difficulty: 'well_tolerated' },
+    ]
+    const prompt = buildFeedbackPrompt(feedback)
+    expect(prompt).toContain('well_tolerated')
   })
 })
