@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp, Copy, Mic, MicOff, Send } from 'lucide-react'
 import type { TranscriptMessage as MemoryTranscriptMessage } from '@/lib/mem0'
 import type { TurnMetricsPayload } from '@/lib/telemetry/voice-metrics'
 import type { Exercise, Language } from '@/lib/types'
-import VoiceAuraTimerFrame from '@/components/training/VoiceAuraTimerFrame'
+import VoiceGlowFrame from '@/components/training/VoiceGlowFrame'
 import {
   describeVoiceDebugText,
   getVoiceDebugSnapshot,
@@ -40,6 +40,7 @@ import {
 interface Props {
   exercises: Exercise[]
   onComplete: (payload: { transcript: MemoryTranscriptMessage[]; completedExercises: Exercise[] }) => void
+  planId?: string
   sessionId?: string
   sessionNumber?: number
   coachLanguage?: Language
@@ -47,8 +48,10 @@ interface Props {
 
 type STTProviderKind = 'browser' | 'elevenlabs' | 'none'
 type TTSProviderKind = 'browser' | 'elevenlabs' | 'kokoro'
+type KokoroDevicePreference = 'wasm' | 'webgpu' | 'cpu' | 'auto'
 const AUDIO_UNLOCK_HINT = 'Audio braucht die erste Interaktion. Druecke Nochmal fuer die erste Ansage.'
 const KOKORO_LOADING_HINT = 'Sprachmodell wird geladen... Das dauert beim ersten Mal kurz.'
+const VOICE_UI_IDLE_GRACE_MS = 400
 
 const PHASE_COLORS: Record<Exercise['phase'], string> = {
   warmup: '#4CAF82',
@@ -170,6 +173,22 @@ function resolveConfiguredCoachLanguage(language: Language, ttsKind: TTSProvider
   return language
 }
 
+function resolveConfiguredKokoroDevice(): KokoroDevicePreference {
+  const configuredDevice = process.env.NEXT_PUBLIC_KOKORO_DEVICE
+  if (
+    configuredDevice === 'wasm'
+    || configuredDevice === 'webgpu'
+    || configuredDevice === 'cpu'
+    || configuredDevice === 'auto'
+  ) {
+    return configuredDevice
+  }
+
+  // WebGPU triggers noisy non-fatal ORT warnings in Next dev and shows an overlay.
+  // For the normal dev loop we prefer the stable wasm path unless explicitly overridden.
+  return 'wasm'
+}
+
 function createSTTProviderWithLanguage(kind: STTProviderKind, language: Language): STTProvider {
   const browserLanguage = resolveSpeechLocale(language)
   const realtimeLanguage = resolveSttLanguage(language)
@@ -207,7 +226,7 @@ function createTTSProvider(
     return new KokoroTTS({
       voice: 'af_bella',
       dtype: 'q4',
-      device: 'auto',
+      device: resolveConfiguredKokoroDevice(),
       webgpuDtype: 'fp32',
       onLoadingChange: options?.onLoadingChange,
     })
@@ -420,7 +439,14 @@ function buildAdaptiveCuePrompt(params: {
   ].join(' ')
 }
 
-export default function SessionPlayer({ exercises, onComplete, sessionId, sessionNumber = 1, coachLanguage = 'de' }: Props) {
+export default function SessionPlayer({
+  exercises,
+  onComplete,
+  planId,
+  sessionId,
+  sessionNumber = 1,
+  coachLanguage = 'de',
+}: Props) {
   const preferredProvider: TTSProviderKind = process.env.NEXT_PUBLIC_VOICE_PROVIDER === 'elevenlabs'
     ? 'elevenlabs'
     : process.env.NEXT_PUBLIC_VOICE_PROVIDER === 'kokoro'
@@ -446,6 +472,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
   const [sessionTranscript, setSessionTranscript] = useState<VoiceTranscriptMessage[]>([])
   const [pendingIntroIndex, setPendingIntroIndex] = useState<number | null>(exercises.length > 0 ? 0 : null)
   const [isCueSpeaking, setIsCueSpeaking] = useState(false)
+  const [isVoiceUiGraceActive, setIsVoiceUiGraceActive] = useState(false)
   const processedTranscriptCountRef = useRef(0)
   const cuePlaybackTokenRef = useRef(0)
   const pendingBrowserTTSFallbackRef = useRef(false)
@@ -546,6 +573,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
     metadata: {
       sessionId,
       sessionNumber,
+      planId,
       language: effectiveCoachLanguage,
       currentExercise: currentExercise
         ? {
@@ -680,6 +708,72 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
     setVoiceHint(error.message || 'Voice-Fehler. Du kannst weiter tippen.')
   }
 
+  const handlePainTool = useEffectEvent(async (input: Record<string, unknown>) => {
+    const location = typeof input.location === 'string' ? input.location : ''
+    const intensity = typeof input.intensity === 'number' ? input.intensity : Number(input.intensity)
+    const type = typeof input.type === 'string' ? input.type : ''
+
+    if (!location || !Number.isFinite(intensity) || !type) {
+      setVoiceHint('Schmerzbericht unvollstaendig.')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/physio/pain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          location,
+          intensity,
+          type,
+          exerciseId: currentExerciseState?.id ?? currentExercise?.name ?? 'current-exercise',
+          sessionId,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({})) as {
+        shouldAbort?: boolean
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Schmerzbericht konnte nicht gespeichert werden.')
+      }
+
+      if (!payload.shouldAbort) {
+        return
+      }
+
+      const abortMessage = effectiveCoachLanguage === 'en'
+        ? 'The pain is too strong. Let us stop here and please speak with your therapist.'
+        : 'Die Schmerzen sind zu stark. Lass uns aufhoeren und sprich bitte mit deinem Therapeuten.'
+
+      interrupt()
+      stopCoachAudio()
+      setSessionTranscript(previous => [
+        ...previous,
+        {
+          role: 'assistant',
+          content: abortMessage,
+          timestamp: Date.now(),
+        },
+      ])
+
+      try {
+        await ttsProvider.speak(abortMessage)
+      } catch (error) {
+        setVoiceHint(toPlaybackHint(error))
+      }
+
+      actionBus.dispatch({ source: 'voice', action: 'end_session', payload: {} })
+    } catch (error) {
+      setVoiceHint(error instanceof Error ? error.message : 'Schmerzbericht konnte nicht gespeichert werden.')
+    }
+  })
+
   const reportVoiceTelemetry = useEffectEvent(async (
     eventType: 'turn_metrics',
     payload: Record<string, unknown>,
@@ -756,6 +850,10 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
       recordVoiceDebugEvent('session-player.tool-call.dispatch', {
         name: tool.name,
       })
+      if (tool.name === 'log_pain') {
+        void handlePainTool(tool.input)
+        return
+      }
       actionBus.dispatch({ source: 'voice', action: tool.name, payload: tool.input })
     },
     onMetrics: handleTurnMetrics,
@@ -810,6 +908,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
           exercisePhase: exercise.phase,
           exerciseStatus: exerciseState?.status ?? 'active',
           language: effectiveCoachLanguage,
+          planId,
         }),
       })
 
@@ -1111,6 +1210,26 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
   }, [isCueSpeaking, isMicEnabled, startListening, stopListening, sttKind, turnState, workoutState.status])
 
   const effectiveTurnState: TurnState = isCueSpeaking && turnState === 'idle' ? 'speaking' : turnState
+  const isMicLoopArmed = isMicEnabled && sttKind !== 'none' && workoutState.status === 'active'
+
+  useEffect(() => {
+    if (effectiveTurnState !== 'idle' || isMicLoopArmed) {
+      setIsVoiceUiGraceActive(true)
+      return
+    }
+
+    const timerId = window.setTimeout(() => {
+      setIsVoiceUiGraceActive(false)
+    }, VOICE_UI_IDLE_GRACE_MS)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [effectiveTurnState, isMicLoopArmed])
+
+  const voiceStatusState: TurnState = effectiveTurnState === 'idle' && isMicLoopArmed
+    ? 'listening'
+    : effectiveTurnState
   const coachCopy = currentExercise ? excerptCoachCopy(
     [...sessionTranscript].reverse().find(message => message.role === 'assistant')?.content
       ?? cuePreviewByIndex[currentIndex]
@@ -1118,7 +1237,8 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
   ) : ''
   const phaseColor = currentExercise ? PHASE_COLORS[currentExercise.phase] ?? 'var(--primary)' : 'var(--primary)'
   const voiceDebugSnapshot = getVoiceDebugSnapshot()
-  const isVoiceAuraActive = workoutState.status === 'active' && effectiveTurnState !== 'idle'
+  const isVoiceGlowActive = workoutState.status === 'active'
+    && (voiceStatusState !== 'idle' || isVoiceUiGraceActive)
 
   useEffect(() => {
     if (!voiceDebugEnabled) return
@@ -1128,7 +1248,8 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
       sessionNumber,
       sttKind,
       ttsKind,
-      turnState: effectiveTurnState,
+      turnState,
+      uiTurnState: voiceStatusState,
       workoutStatus: workoutState.status,
       isMicEnabled,
       isTtsModelLoading,
@@ -1140,15 +1261,17 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
   }, [
     currentIndex,
     effectiveCoachLanguage,
-    effectiveTurnState,
     hasAudioInteraction,
     isMicEnabled,
     isTtsModelLoading,
+    isVoiceUiGraceActive,
     pendingIntroIndex,
     sessionNumber,
     sessionTranscript.length,
     sttKind,
     ttsKind,
+    turnState,
+    voiceStatusState,
     voiceDebugEnabled,
     workoutState.status,
   ])
@@ -1158,8 +1281,14 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
     if (!trimmed || !currentExercise) return
 
     recordVoiceDebugEvent('session-player.user-turn.submit', describeVoiceDebugText(trimmed))
-    interrupt()
-    stopCoachAudio()
+    if (
+      isCueSpeaking
+      || turnState === 'processing'
+      || turnState === 'speaking'
+      || ttsProvider.isSpeaking()
+    ) {
+      interrupt()
+    }
     setTypedMessage('')
     setDraftTranscript('')
     setVoiceHint(undefined)
@@ -1345,7 +1474,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
         <div className="session-player__hero flex flex-col items-center text-center">
           <div className="mb-4">
             <VoiceStatusIndicator
-              state={effectiveTurnState}
+              state={voiceStatusState}
               className="border-white/8 bg-white/4 text-white/80"
               labels={{
                 idle: 'Bereit',
@@ -1367,9 +1496,9 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
         </div>
 
         <div className="session-player__body overflow-hidden">
-          <VoiceAuraTimerFrame
-            state={effectiveTurnState}
-            active={isVoiceAuraActive}
+          <VoiceGlowFrame
+            state={voiceStatusState}
+            active={isVoiceGlowActive}
             className="session-player__timer h-[min(17.75rem,34vh)] w-[min(17.75rem,34vh)] min-h-[13.5rem] min-w-[13.5rem]"
           >
             {currentExerciseState.type === 'timed' ? (
@@ -1387,7 +1516,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
                 <span className="mt-2 text-[10px] uppercase tracking-[0.28em] text-white/26">Wiederholungen</span>
               </div>
             )}
-          </VoiceAuraTimerFrame>
+          </VoiceGlowFrame>
 
           <div className="session-player__copy-wrap flex min-h-0 w-full flex-col items-center justify-start overflow-hidden px-3">
             <p
@@ -1519,7 +1648,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                   <span className="text-white/32">Turn</span>
-                  <span>{effectiveTurnState}</span>
+                  <span>{voiceStatusState}</span>
                   <span className="text-white/32">STT</span>
                   <span>{sttKind}</span>
                   <span className="text-white/32">TTS</span>

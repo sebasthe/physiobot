@@ -16,6 +16,8 @@ let mockSpeak: ReturnType<typeof vi.fn>
 let mockCancel: ReturnType<typeof vi.fn>
 let mockFetch: ReturnType<typeof vi.fn>
 const originalCoachLanguage = process.env.NEXT_PUBLIC_COACH_LANGUAGE
+const originalVoiceProvider = process.env.NEXT_PUBLIC_VOICE_PROVIDER
+const originalKokoroDevice = process.env.NEXT_PUBLIC_KOKORO_DEVICE
 
 class MockSpeechRecognition {
   static instances: MockSpeechRecognition[] = []
@@ -96,6 +98,18 @@ describe('SessionPlayer', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    if (originalVoiceProvider === undefined) {
+      delete process.env.NEXT_PUBLIC_VOICE_PROVIDER
+    } else {
+      process.env.NEXT_PUBLIC_VOICE_PROVIDER = originalVoiceProvider
+    }
+
+    if (originalKokoroDevice === undefined) {
+      delete process.env.NEXT_PUBLIC_KOKORO_DEVICE
+    } else {
+      process.env.NEXT_PUBLIC_KOKORO_DEVICE = originalKokoroDevice
+    }
+
     if (originalCoachLanguage === undefined) {
       delete process.env.NEXT_PUBLIC_COACH_LANGUAGE
     } else {
@@ -233,6 +247,17 @@ describe('SessionPlayer', () => {
     expect(recognition?.abort).not.toHaveBeenCalled()
   })
 
+  it('keeps the voice glow active while the mic loop is armed', () => {
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+
+    expect(screen.getByTestId('timer-ring-fallback')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /mikrofon an/i }))
+
+    expect(screen.getByTestId('voice-glow-frame')).toBeInTheDocument()
+    expect(screen.getByText('Hoert zu')).toBeInTheDocument()
+  })
+
   it('shows a hint when intro playback fails', async () => {
     Object.defineProperty(window.navigator, 'userActivation', {
       configurable: true,
@@ -284,5 +309,28 @@ describe('SessionPlayer', () => {
 
     expect(await screen.findByText(/let's begin this exercise/i)).toBeInTheDocument()
     expect(screen.queryByText(/mobilisiere jetzt deinen rücken/i)).not.toBeInTheDocument()
+  })
+
+  it('prefers the stable wasm Kokoro path unless webgpu is explicitly requested', async () => {
+    vi.useFakeTimers()
+    process.env.NEXT_PUBLIC_VOICE_PROVIDER = 'kokoro'
+
+    const { KokoroTTS } = await import('@/lib/voice-module/providers/tts/KokoroTTS')
+    const kokoroSpy = vi.spyOn(KokoroTTS.prototype, 'prepare').mockResolvedValue()
+
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350)
+    })
+
+    expect(kokoroSpy).toHaveBeenCalled()
+
+    const instance = kokoroSpy.mock.instances[0] as {
+      config?: { device?: string }
+    }
+    expect(instance['config']?.device).toBe('wasm')
+
+    kokoroSpy.mockRestore()
   })
 })
