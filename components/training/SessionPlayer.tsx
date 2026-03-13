@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Copy, Mic, MicOff, Send } from 'lucide-react'
 import type { TranscriptMessage as MemoryTranscriptMessage } from '@/lib/mem0'
+import type { TurnMetricsPayload } from '@/lib/telemetry/voice-metrics'
 import type { Exercise, Language } from '@/lib/types'
 import VoiceAuraTimerFrame from '@/components/training/VoiceAuraTimerFrame'
 import {
@@ -449,6 +450,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
   const cuePlaybackTokenRef = useRef(0)
   const pendingBrowserTTSFallbackRef = useRef(false)
   const autoCueReadyRef = useRef(initiallyUnlocked)
+  const prefetchedCueKeyRef = useRef<string | null>(null)
   const voiceDebugEnabled = isVoiceDebugEnabled()
   const effectiveCoachLanguage = resolveConfiguredCoachLanguage(coachLanguage, ttsKind)
 
@@ -503,6 +505,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
 
   useEffect(() => {
     setCuePreviewByIndex({})
+    prefetchedCueKeyRef.current = null
   }, [effectiveCoachLanguage])
 
   useEffect(() => {
@@ -677,6 +680,38 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
     setVoiceHint(error.message || 'Voice-Fehler. Du kannst weiter tippen.')
   }
 
+  const reportVoiceTelemetry = useEffectEvent(async (
+    eventType: 'turn_metrics',
+    payload: Record<string, unknown>,
+  ) => {
+    try {
+      await fetch('/api/voice/telemetry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          eventType,
+          sessionId,
+          payload,
+        }),
+      })
+    } catch {
+      // Telemetry is best-effort only.
+    }
+  })
+
+  const handleTurnMetrics = useEffectEvent((metrics: TurnMetricsPayload) => {
+    recordVoiceDebugEvent('session-player.turn-metrics', {
+      totalTurnTime: metrics.totalTurnTime,
+      utteranceCategory: metrics.utteranceCategory,
+      skippedReason: metrics.skippedReason,
+      llmTimedOut: metrics.llmTimedOut,
+    })
+    void reportVoiceTelemetry('turn_metrics', metrics as unknown as Record<string, unknown>)
+  })
+
   const handleStartListeningFailure = (error: unknown) => {
     if (sttKind === 'elevenlabs' && supportsBrowserSpeechRecognition()) {
       recordVoiceDebugEvent('session-player.listening-failure', {
@@ -723,6 +758,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
       })
       actionBus.dispatch({ source: 'voice', action: tool.name, payload: tool.input })
     },
+    onMetrics: handleTurnMetrics,
     onError: handleVoiceError,
   })
 
@@ -822,6 +858,12 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
       return
     }
 
+    const cueKey = `${effectiveCoachLanguage}:${currentIndex}:${currentExercise.name}`
+    if (prefetchedCueKeyRef.current === cueKey) {
+      return
+    }
+    prefetchedCueKeyRef.current = cueKey
+
     let cancelled = false
     void requestAdaptiveCue('intro', currentExercise, currentExerciseState).then(cue => {
       if (cancelled) {
@@ -843,7 +885,7 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
     return () => {
       cancelled = true
     }
-  }, [currentExercise, currentExerciseState, currentIndex, requestAdaptiveCue])
+  }, [currentExercise, currentIndex, effectiveCoachLanguage, requestAdaptiveCue])
 
   useEffect(() => {
     if (voiceTranscript.length <= processedTranscriptCountRef.current) return
@@ -1044,9 +1086,17 @@ export default function SessionPlayer({ exercises, onComplete, sessionId, sessio
       !isMicEnabled
       || sttKind === 'none'
       || workoutState.status !== 'active'
-      || turnState !== 'idle'
       || isCueSpeaking
     ) {
+      stopListening()
+      return
+    }
+
+    if (turnState === 'listening') {
+      return
+    }
+
+    if (turnState !== 'idle') {
       stopListening()
       return
     }

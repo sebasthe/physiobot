@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SessionPlayer from '@/components/training/SessionPlayer'
@@ -16,6 +16,30 @@ let mockSpeak: ReturnType<typeof vi.fn>
 let mockCancel: ReturnType<typeof vi.fn>
 let mockFetch: ReturnType<typeof vi.fn>
 const originalCoachLanguage = process.env.NEXT_PUBLIC_COACH_LANGUAGE
+
+class MockSpeechRecognition {
+  static instances: MockSpeechRecognition[] = []
+
+  lang = ''
+  continuous = false
+  interimResults = false
+  onresult: ((event: { results: Array<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null = null
+  onerror: ((event: { error: string }) => void) | null = null
+  onend: (() => void) | null = null
+  start = vi.fn()
+  stop = vi.fn()
+  abort = vi.fn()
+
+  constructor() {
+    MockSpeechRecognition.instances.push(this)
+  }
+
+  static reset() {
+    MockSpeechRecognition.instances = []
+  }
+}
+
+vi.stubGlobal('webkitSpeechRecognition', MockSpeechRecognition)
 
 describe('SessionPlayer', () => {
   beforeEach(() => {
@@ -45,6 +69,7 @@ describe('SessionPlayer', () => {
       utterance.onend?.()
     })
     mockCancel = vi.fn()
+    MockSpeechRecognition.reset()
     mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -70,6 +95,7 @@ describe('SessionPlayer', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     if (originalCoachLanguage === undefined) {
       delete process.env.NEXT_PUBLIC_COACH_LANGUAGE
     } else {
@@ -175,6 +201,36 @@ describe('SessionPlayer', () => {
     expect(JSON.parse(String(request?.body))).toEqual(expect.objectContaining({
       language: 'en',
     }))
+  })
+
+  it('prefetches the intro cue only once while the timed exercise timer ticks', async () => {
+    vi.useFakeTimers()
+
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100)
+    })
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps browser speech recognition active after the mic is enabled', async () => {
+    vi.useFakeTimers()
+
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /mikrofon an/i }))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250)
+    })
+
+    const recognition = MockSpeechRecognition.instances[0]
+    expect(recognition?.start).toHaveBeenCalledTimes(1)
+    expect(recognition?.abort).not.toHaveBeenCalled()
   })
 
   it('shows a hint when intro playback fails', async () => {

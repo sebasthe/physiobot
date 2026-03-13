@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VoiceSession } from '@/lib/voice-module/core/VoiceSession'
 import type { StreamChunk, TurnContext, VoiceConfig } from '@/lib/voice-module/core/types'
 import type { LLMProvider } from '@/lib/voice-module/providers/llm/LLMProvider'
@@ -49,10 +49,15 @@ describe('VoiceSession', () => {
   }
 
   beforeEach(() => {
+    vi.useRealTimers()
     stt = makeMockSTT()
     tts = makeMockTTS()
     llm = makeMockLLM()
     session = new VoiceSession({ config, stt, tts, llm })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('starts in idle state', () => {
@@ -127,5 +132,58 @@ describe('VoiceSession', () => {
     await session.sendMessage('Pause', turnContext)
 
     expect(handler).toHaveBeenCalledWith({ name: 'pause_workout', input: {} })
+  })
+
+  it('requests a repeat for very short garbled transcripts', async () => {
+    vi.useFakeTimers()
+    stt = makeMockSTT()
+    tts = makeMockTTS()
+    llm = makeMockLLM()
+    session = new VoiceSession({ config, stt, tts, llm })
+
+    stt.onCommittedTranscript?.('x')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(tts.speak).toHaveBeenCalledWith('Kannst du das nochmal sagen?')
+  })
+
+  it('debounces rapid duplicate committed transcripts', async () => {
+    vi.useFakeTimers()
+    stt = makeMockSTT()
+    tts = makeMockTTS()
+    llm = makeMockLLM()
+    session = new VoiceSession({ config, stt, tts, llm })
+
+    const handler = vi.fn()
+    session.on('committedTranscript', handler)
+
+    stt.onCommittedTranscript?.('Hallo')
+    stt.onCommittedTranscript?.('Hallo')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledWith('Hallo')
+  })
+
+  it('nudges and eventually pauses the workout after long silence', async () => {
+    vi.useFakeTimers()
+    stt = makeMockSTT()
+    tts = makeMockTTS()
+    llm = makeMockLLM()
+    session = new VoiceSession({ config, stt, tts, llm })
+
+    const toolHandler = vi.fn()
+    session.on('toolCall', toolHandler)
+
+    await session.sendMessage('Test', turnContext)
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(tts.speak).toHaveBeenCalledWith('Alles gut bei dir?')
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(tts.speak).toHaveBeenCalledWith('Alles ok? Sag Bescheid wenn du Hilfe brauchst.')
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(toolHandler).toHaveBeenCalledWith({ name: 'pause_workout', input: {} })
   })
 })

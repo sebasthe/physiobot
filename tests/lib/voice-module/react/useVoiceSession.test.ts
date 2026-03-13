@@ -66,6 +66,21 @@ describe('useVoiceSession', () => {
     expect(result.current.transcript.length).toBeGreaterThan(0)
   })
 
+  it('forwards metrics events to the provided callback', async () => {
+    const onMetrics = vi.fn()
+    const { result } = renderHook(() =>
+      useVoiceSession({ config, stt: makeMockSTT(), tts: makeMockTTS(), llm: makeMockLLM(), onMetrics }),
+    )
+
+    await act(async () => {
+      await result.current.sendMessage('Hello', { systemPrompt: 'test' })
+    })
+
+    expect(onMetrics).toHaveBeenCalledWith(expect.objectContaining({
+      utteranceCategory: 'question',
+    }))
+  })
+
   it('does not destroy the session on a normal rerender', () => {
     const stt = makeMockSTT()
     const tts = makeMockTTS()
