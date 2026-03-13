@@ -41,6 +41,7 @@ describe('FetchSSEProvider', () => {
         },
       ],
       metadata: {
+        language: 'en',
         currentExercise: { name: 'Squat', phase: 'main' },
         sessionNumber: 2,
         workoutState: {
@@ -80,6 +81,7 @@ describe('FetchSSEProvider', () => {
 
     const [, request] = vi.mocked(globalThis.fetch).mock.calls[0] ?? []
     expect(JSON.parse(String(request?.body))).toEqual(expect.objectContaining({
+      language: 'en',
       sessionNumber: 2,
       exercisePhase: 'main',
       exerciseStatus: 'active',

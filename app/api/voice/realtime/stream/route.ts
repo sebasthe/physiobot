@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { ModeContext } from '@/lib/coach/types'
 import type { TranscriptMessage } from '@/lib/mem0'
+import type { Language } from '@/lib/types'
 import { streamVoiceTurnOrchestration } from '@/lib/voice/server-orchestrator'
 import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
 
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     exerciseStatus?: ModeContext['exerciseStatus']
     tools?: ToolDefinition[]
     workoutState?: WorkoutState
+    language?: Language
   }
 
   const stream = new ReadableStream({
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
             exerciseStatus: body.exerciseStatus,
             tools: body.tools,
             workoutState: body.workoutState,
+            language: body.language,
           })) {
             if (chunk.type === 'delta') {
               controller.enqueue(encoder.encode(sseData({ type: 'delta', text: chunk.text })))

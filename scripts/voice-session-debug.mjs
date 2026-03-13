@@ -16,11 +16,22 @@ const REQUIRE_MIC = isEnabled(process.env.VOICE_DEBUG_REQUIRE_MIC)
 const MESSAGE = process.env.VOICE_DEBUG_MESSAGE ?? 'Ich bin bereit. Was ist der naechste Schritt?'
 const EVENT_TIMEOUT_MS = Number(process.env.VOICE_DEBUG_EVENT_TIMEOUT_MS ?? 15000)
 const SESSION_TIMEOUT_MS = Number(process.env.VOICE_DEBUG_SESSION_TIMEOUT_MS ?? 30000)
-const AUDIO_SIGNAL_TYPES = [
+const AUDIO_REQUEST_SIGNAL_TYPES = [
   'tts.browser.speak.request',
   'tts.elevenlabs.speak.request',
+  'tts.kokoro.speak.request',
   'speechSynthesis.speak.call',
   'audio.play.call',
+]
+const AUDIO_RESOLVED_SIGNAL_TYPES = [
+  'tts.browser.speak.ended',
+  'tts.elevenlabs.speak.ended',
+  'tts.kokoro.speak.ended',
+  'tts.kokoro.audio.play.ended',
+  'tts.kokoro.audio.play.resolve',
+  'speechSynthesis.utterance.end',
+  'audio.play.resolve',
+  'audio.event.playing',
 ]
 const LLM_SIGNAL_TYPES = [
   'llm.fetch-sse.response',
@@ -398,7 +409,10 @@ try {
 
   logSection('Trigger Intro Audio')
   await page.getByRole('button', { name: /nochmal/i }).click()
-  await waitForDebugEvent(page, AUDIO_SIGNAL_TYPES, EVENT_TIMEOUT_MS)
+  await waitForDebugEvent(page, AUDIO_REQUEST_SIGNAL_TYPES, EVENT_TIMEOUT_MS)
+  if (REQUIRE_AUDIO) {
+    await waitForDebugEvent(page, AUDIO_RESOLVED_SIGNAL_TYPES, EVENT_TIMEOUT_MS).catch(() => undefined)
+  }
   screenshots.push(await saveScreenshot(page, '02-after-repeat.png'))
 
   if (TRY_LLM) {
@@ -482,12 +496,16 @@ function buildSummary(debugEvents, options) {
   const audioRequested = hasAnyEvent(debugEvents, [
     'tts.browser.speak.request',
     'tts.elevenlabs.speak.request',
+    'tts.kokoro.speak.request',
     'speechSynthesis.speak.call',
     'audio.play.call',
   ])
   const audioResolved = hasAnyEvent(debugEvents, [
     'tts.browser.speak.ended',
     'tts.elevenlabs.speak.ended',
+    'tts.kokoro.speak.ended',
+    'tts.kokoro.audio.play.ended',
+    'tts.kokoro.audio.play.resolve',
     'speechSynthesis.utterance.end',
     'audio.play.resolve',
     'audio.event.playing',

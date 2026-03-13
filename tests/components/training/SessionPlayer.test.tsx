@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SessionPlayer from '@/components/training/SessionPlayer'
 import type { Exercise } from '@/lib/types'
 import { clearVoiceDebugEvents, getVoiceDebugEvents } from '@/lib/voice-debug/client'
@@ -14,9 +14,17 @@ const exercises: Exercise[] = [
 
 let mockSpeak: ReturnType<typeof vi.fn>
 let mockCancel: ReturnType<typeof vi.fn>
+let mockFetch: ReturnType<typeof vi.fn>
+const originalCoachLanguage = process.env.NEXT_PUBLIC_COACH_LANGUAGE
 
 describe('SessionPlayer', () => {
   beforeEach(() => {
+    if (originalCoachLanguage === undefined) {
+      delete process.env.NEXT_PUBLIC_COACH_LANGUAGE
+    } else {
+      process.env.NEXT_PUBLIC_COACH_LANGUAGE = originalCoachLanguage
+    }
+
     window.localStorage.clear()
     clearVoiceDebugEvents()
     delete (window as Window & {
@@ -37,6 +45,14 @@ describe('SessionPlayer', () => {
       utterance.onend?.()
     })
     mockCancel = vi.fn()
+    mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        reply: 'Keep your shoulders soft and move with control.',
+        llmLatencyMs: 42,
+      }),
+    })
 
     vi.stubGlobal('speechSynthesis', {
       speak: mockSpeak,
@@ -50,6 +66,15 @@ describe('SessionPlayer', () => {
       onend: null as (() => void) | null,
       onerror: null as (() => void) | null,
     })))
+    vi.stubGlobal('fetch', mockFetch)
+  })
+
+  afterEach(() => {
+    if (originalCoachLanguage === undefined) {
+      delete process.env.NEXT_PUBLIC_COACH_LANGUAGE
+    } else {
+      process.env.NEXT_PUBLIC_COACH_LANGUAGE = originalCoachLanguage
+    }
   })
 
   it('shows first exercise name', async () => {
@@ -96,7 +121,7 @@ describe('SessionPlayer', () => {
     })
   })
 
-  it('calls speech synthesis with the first voice script when audio is already unlocked', async () => {
+  it('calls speech synthesis with a dynamic coach cue when audio is already unlocked', async () => {
     Object.defineProperty(window.navigator, 'userActivation', {
       configurable: true,
       value: { hasBeenActive: true },
@@ -109,6 +134,47 @@ describe('SessionPlayer', () => {
     await vi.waitFor(() => {
       expect(globalThis.speechSynthesis.speak).toHaveBeenCalled()
     })
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/voice/session', expect.objectContaining({
+      method: 'POST',
+    }))
+    expect(globalThis.SpeechSynthesisUtterance).toHaveBeenCalledWith('Keep your shoulders soft and move with control.')
+  })
+
+  it('uses the configured English speech locale for browser TTS', async () => {
+    Object.defineProperty(window.navigator, 'userActivation', {
+      configurable: true,
+      value: { hasBeenActive: true },
+    })
+
+    await act(async () => {
+      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
+    })
+
+    await vi.waitFor(() => {
+      expect(mockSpeak).toHaveBeenCalled()
+    })
+
+    const utterance = mockSpeak.mock.calls[0]?.[0]
+    expect(utterance?.lang).toBe('en-US')
+  })
+
+  it('sends the requested English language to the adaptive cue endpoint and shows the English cue', async () => {
+    Object.defineProperty(window.navigator, 'userActivation', {
+      configurable: true,
+      value: { hasBeenActive: true },
+    })
+
+    await act(async () => {
+      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
+    })
+
+    expect(await screen.findByText(/keep your shoulders soft/i)).toBeInTheDocument()
+
+    const [, request] = mockFetch.mock.calls[0] ?? []
+    expect(JSON.parse(String(request?.body))).toEqual(expect.objectContaining({
+      language: 'en',
+    }))
   })
 
   it('shows a hint when intro playback fails', async () => {
@@ -133,5 +199,34 @@ describe('SessionPlayer', () => {
 
     expect(await screen.findByTestId('voice-debug-panel')).toBeInTheDocument()
     expect(getVoiceDebugEvents().some(event => event.type === 'session-player.init')).toBe(true)
+  })
+
+  it('falls back to the stored voice script when the adaptive cue request fails', async () => {
+    Object.defineProperty(window.navigator, 'userActivation', {
+      configurable: true,
+      value: { hasBeenActive: true },
+    })
+
+    mockFetch.mockRejectedValue(new Error('network down'))
+
+    await act(async () => {
+      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    })
+
+    await vi.waitFor(() => {
+      expect(globalThis.speechSynthesis.speak).toHaveBeenCalled()
+    })
+
+    expect(globalThis.SpeechSynthesisUtterance).toHaveBeenCalledWith('Mobilisiere jetzt deinen Rücken!')
+  })
+
+  it('does not fall back to the stored German voice script when English is forced', async () => {
+    process.env.NEXT_PUBLIC_COACH_LANGUAGE = 'en'
+    mockFetch.mockRejectedValueOnce(new Error('network down'))
+
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+
+    expect(await screen.findByText(/let's begin this exercise/i)).toBeInTheDocument()
+    expect(screen.queryByText(/mobilisiere jetzt deinen rücken/i)).not.toBeInTheDocument()
   })
 })

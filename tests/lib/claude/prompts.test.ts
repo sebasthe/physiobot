@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildSystemPrompt, buildPlanRequestMessage } from '@/lib/claude/prompts'
+import { buildDrMiaSystemPrompt, buildPlanRequestMessage, buildSystemPrompt } from '@/lib/claude/prompts'
+import type { SessionMemoryContext } from '@/lib/mem0'
 import type { UserPersonality, HealthProfile } from '@/lib/types'
 
 const personality: UserPersonality = {
@@ -17,10 +18,17 @@ const healthProfile: HealthProfile = {
   sessions_per_week: 3,
 }
 
+const memoryContext: SessionMemoryContext = {
+  kernMotivation: null,
+  personalityHints: [],
+  patternHints: [],
+  lifeContext: [],
+}
+
 describe('buildSystemPrompt', () => {
   it('includes coach persona', () => {
     const prompt = buildSystemPrompt({ personality, memories: [] })
-    expect(prompt).toContain('Tony Robbins')
+    expect(prompt).toContain('motivierender Coach')
   })
 
   it('includes language instruction', () => {
@@ -35,6 +43,19 @@ describe('buildSystemPrompt', () => {
     })
     expect(prompt).toContain('Knieschmerzen links')
   })
+
+  it('switches the system prompt to English when the user language is English', () => {
+    const prompt = buildSystemPrompt({
+      personality: {
+        ...personality,
+        language: 'en',
+      },
+      memories: [],
+    })
+
+    expect(prompt).toContain('Always respond in English')
+    expect(prompt).not.toContain('Duze den Nutzer')
+  })
 })
 
 describe('buildPlanRequestMessage', () => {
@@ -46,5 +67,32 @@ describe('buildPlanRequestMessage', () => {
   it('includes complaints', () => {
     const message = buildPlanRequestMessage({ healthProfile })
     expect(message).toContain('Rückenschmerzen')
+  })
+
+  it('switches voice_script instructions to English when requested', () => {
+    const message = buildPlanRequestMessage({ healthProfile, language: 'en' })
+    expect(message).toContain('Natural coaching text in English')
+  })
+})
+
+describe('buildDrMiaSystemPrompt', () => {
+  it('produces an English live-coach prompt when English is requested', () => {
+    const prompt = buildDrMiaSystemPrompt({
+      userName: 'Sam',
+      streak: 4,
+      bodyAreas: ['neck'],
+      memoryContext,
+      personality: {
+        coach_persona: 'calm_coach',
+        feedback_style: 'gentle',
+        language: 'en',
+      },
+      timeOfDay: 'morning',
+      sessionNumber: 2,
+    })
+
+    expect(prompt).toContain('Respond naturally in English')
+    expect(prompt).toContain('Body areas: neck')
+    expect(prompt).not.toContain('Antworte natuerlich auf Deutsch')
   })
 })

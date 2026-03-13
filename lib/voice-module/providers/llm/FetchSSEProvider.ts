@@ -24,6 +24,7 @@ export class FetchSSEProvider implements LLMProvider {
       messageCount: messages.length,
       toolCount: context.tools?.length ?? 0,
       currentExercise: currentExercise?.name ?? null,
+      language: resolveLanguage(context.metadata?.language),
     })
 
     const response = await fetch(this.config.endpoint, {
@@ -38,6 +39,7 @@ export class FetchSSEProvider implements LLMProvider {
         exerciseStatus: currentExerciseState?.status,
         tools: context.tools ?? [],
         workoutState: context.metadata?.workoutState ?? null,
+        language: resolveLanguage(context.metadata?.language),
       }),
     })
 
@@ -165,6 +167,14 @@ function resolveExercisePhase(
 
   if (currentExerciseStatePhase === 'warmup' || currentExerciseStatePhase === 'main' || currentExerciseStatePhase === 'cooldown') {
     return currentExerciseStatePhase
+  }
+
+  return undefined
+}
+
+function resolveLanguage(value: unknown): 'de' | 'en' | undefined {
+  if (value === 'de' || value === 'en') {
+    return value
   }
 
   return undefined

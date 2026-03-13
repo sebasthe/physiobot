@@ -30,7 +30,11 @@ export async function POST() {
     memories: memoryTexts,
   })
 
-  const message = buildPlanRequestMessage({ healthProfile: healthProfile as HealthProfile })
+  const typedPersonality = personality as UserPersonality
+  const message = buildPlanRequestMessage({
+    healthProfile: healthProfile as HealthProfile,
+    language: typedPersonality.language,
+  })
 
   try {
     const response = await anthropic.messages.create({

@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SessionPlayer from '@/components/training/SessionPlayer'
-import type { Exercise } from '@/lib/types'
+import type { Exercise, Language } from '@/lib/types'
 import type { TranscriptMessage } from '@/lib/mem0'
 
 export default function TrainingSessionPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [sessionId, setSessionId] = useState<string>()
   const [sessionNumber, setSessionNumber] = useState(1)
+  const [coachLanguage, setCoachLanguage] = useState<Language>('de')
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
@@ -31,6 +32,12 @@ export default function TrainingSessionPage() {
       .select('active_plan_id')
       .eq('id', user.id)
       .single()
+
+    const { data: personality } = await supabase
+      .from('user_personality')
+      .select('language')
+      .eq('user_id', user.id)
+      .maybeSingle()
 
     if (!profile?.active_plan_id) { router.push('/dashboard'); return }
 
@@ -62,6 +69,7 @@ export default function TrainingSessionPage() {
     } else {
       setSessionId(session.id)
     }
+    setCoachLanguage(personality?.language === 'en' ? 'en' : 'de')
     setExercises(plan.exercises as Exercise[])
     setIsLoading(false)
   }
@@ -97,6 +105,7 @@ export default function TrainingSessionPage() {
       onComplete={handleSessionComplete}
       sessionId={sessionId}
       sessionNumber={sessionNumber}
+      coachLanguage={coachLanguage}
     />
   )
 }
