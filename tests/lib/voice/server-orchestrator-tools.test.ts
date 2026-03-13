@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { anthropic } from '@/lib/claude/client'
+import { buildDrMiaSystemPrompt } from '@/lib/claude/prompts'
 import { streamVoiceTurnOrchestration } from '@/lib/voice/server-orchestrator'
 import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
 
@@ -86,6 +87,22 @@ function createSupabaseStub() {
           select: () => ({
             eq: () => ({
               maybeSingle: () => Promise.resolve({ data: { name: 'Test User' } }),
+            }),
+          }),
+        }
+      }
+
+      if (table === 'user_personality') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: {
+                  coach_persona: 'calm_coach',
+                  feedback_style: 'gentle',
+                  language: 'de',
+                },
+              }),
             }),
           }),
         }
@@ -186,6 +203,69 @@ describe('server orchestrator tool_use', () => {
     expect(chunks).toContainEqual({ type: 'delta', text: 'Bitte stoppen.' })
     expect(createMock).toHaveBeenCalledWith(expect.objectContaining({
       model: 'claude-sonnet-4-5-20241022',
+    }))
+  })
+
+  it('passes user personality into the live coach system prompt', async () => {
+    const createMock = vi.mocked(anthropic.messages.create)
+    const buildPromptMock = vi.mocked(buildDrMiaSystemPrompt)
+
+    createMock.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Weiter so.' } }
+      },
+    } as never)
+
+    for await (const _chunk of streamVoiceTurnOrchestration(createSupabaseStub(), {
+      userId: 'test-user',
+      messages: [{ role: 'user', content: 'Ich bin bereit' }],
+      currentExercise: { name: 'Squat', description: 'Stay tall', phase: 'main' },
+      exercisePhase: 'main',
+      exerciseStatus: 'active',
+      sessionNumber: 3,
+      workoutState,
+    })) {
+      // exhaust stream
+    }
+
+    expect(buildPromptMock).toHaveBeenCalledWith(expect.objectContaining({
+      personality: {
+        coach_persona: 'calm_coach',
+        feedback_style: 'gentle',
+        language: 'de',
+      },
+    }))
+  })
+
+  it('lets the runtime request override the live coach language', async () => {
+    const createMock = vi.mocked(anthropic.messages.create)
+    const buildPromptMock = vi.mocked(buildDrMiaSystemPrompt)
+
+    createMock.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Keep going.' } }
+      },
+    } as never)
+
+    for await (const _chunk of streamVoiceTurnOrchestration(createSupabaseStub(), {
+      userId: 'test-user',
+      messages: [{ role: 'user', content: 'Ready' }],
+      currentExercise: { name: 'Squat', description: 'Stay tall', phase: 'main' },
+      exercisePhase: 'main',
+      exerciseStatus: 'active',
+      sessionNumber: 3,
+      workoutState,
+      language: 'en',
+    })) {
+      // exhaust stream
+    }
+
+    expect(buildPromptMock).toHaveBeenCalledWith(expect.objectContaining({
+      personality: {
+        coach_persona: 'calm_coach',
+        feedback_style: 'gentle',
+        language: 'en',
+      },
     }))
   })
 })

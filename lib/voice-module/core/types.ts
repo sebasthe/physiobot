@@ -1,6 +1,6 @@
 export interface VoiceConfig {
   stt: 'elevenlabs' | 'browser' | 'none'
-  tts: 'elevenlabs' | 'browser'
+  tts: 'elevenlabs' | 'browser' | 'kokoro'
   llmEndpoint: string
   autoListen: boolean
   language: string

@@ -6,6 +6,7 @@ import { getModelForMode, selectCoachMode, shouldProbeMotivation } from '@/lib/c
 import type { CoachMode, CoachingMemorySnapshot, ModeContext } from '@/lib/coach/types'
 import { MemoryResolver } from '@/lib/memory/resolver'
 import type { SessionMemoryContext, TranscriptMessage } from '@/lib/mem0'
+import type { Language, UserPersonality } from '@/lib/types'
 import type { ToolDefinition, WorkoutState } from '@/lib/voice-module/core/types'
 
 interface VoiceOrchestratorInput {
@@ -17,6 +18,7 @@ interface VoiceOrchestratorInput {
   exerciseStatus?: ModeContext['exerciseStatus']
   tools?: ToolDefinition[]
   workoutState?: WorkoutState
+  language?: Language
 }
 
 interface VoiceOrchestratorResult {
@@ -36,7 +38,17 @@ export type VoiceTurnStreamChunk =
 
 const memoryResolver = new MemoryResolver()
 
-function getPhaseHint(phase: string | undefined) {
+function getPhaseHint(phase: string | undefined, language: Language) {
+  if (language === 'en') {
+    if (phase === 'warmup') {
+      return 'Phase hint: gentle start, safety, breathing, no overload.'
+    }
+    if (phase === 'cooldown') {
+      return 'Phase hint: reduce pace, relax, and finish with a positive feeling.'
+    }
+    return 'Phase hint: clear technique cues, short motivating corrections, controlled intensity.'
+  }
+
   if (phase === 'warmup') {
     return 'Phase-Hinweis: ruhiger Einstieg, Sicherheit, Atmung, keine Ueberforderung.'
   }
@@ -153,18 +165,22 @@ async function buildVoiceOrchestrationPrompt(
     sessionNumber: number
   },
 ): Promise<VoiceOrchestrationPrompt> {
-  const [{ data: healthProfile }, { data: profile }, { data: streakRow }, { data: sessions }] = await Promise.all([
+  const [{ data: healthProfile }, { data: profile }, { data: personality }, { data: streakRow }, { data: sessions }] = await Promise.all([
     supabase.from('health_profiles').select('complaints').eq('user_id', input.userId).maybeSingle(),
     supabase.from('profiles').select('name').eq('id', input.userId).maybeSingle(),
+    supabase.from('user_personality').select('coach_persona, feedback_style, language').eq('user_id', input.userId).maybeSingle(),
     supabase.from('streaks').select('current').eq('user_id', input.userId).maybeSingle(),
     supabase.from('sessions').select('created_at, completed_at').eq('user_id', input.userId).order('created_at', { ascending: false }).limit(1),
   ])
 
+  const resolvedPersonality = mergeVoicePersonality(asVoicePersonality(personality), input.language)
+  const outputLanguage = resolvedPersonality?.language === 'en' ? 'en' : 'de'
+  const outputLocale = outputLanguage === 'en' ? 'en-US' : 'de-DE'
   const nowHour = new Date().getHours()
   const timeOfDay = nowHour < 11 ? 'morning' : nowHour < 17 ? 'midday' : 'evening'
   const lastSession = sessions?.[0]
     ? {
-        date: new Date(sessions[0].created_at).toLocaleDateString('de-DE'),
+        date: new Date(sessions[0].created_at).toLocaleDateString(outputLocale),
         duration: 0,
         completedAll: Boolean(sessions[0].completed_at),
       }
@@ -175,6 +191,7 @@ async function buildVoiceOrchestrationPrompt(
     streak: streakRow?.current ?? 0,
     bodyAreas: healthProfile?.complaints ?? [],
     memoryContext: toSessionMemoryContext(coachTurn.memorySnapshot),
+    personality: resolvedPersonality,
     timeOfDay,
     lastSession,
     sessionNumber: coachTurn.sessionNumber,
@@ -182,8 +199,12 @@ async function buildVoiceOrchestrationPrompt(
   })}\n\n${buildCoachPolicyPrompt(coachTurn.mode, coachTurn.memorySnapshot)}`
 
   const contextMessage = input.currentExercise?.name
-    ? `Aktuelle Uebung: ${input.currentExercise.name}. Beschreibung: ${input.currentExercise.description ?? 'keine zusaetzliche Beschreibung'}. Phase: ${input.currentExercise.phase ?? 'main'}. ${getPhaseHint(input.currentExercise.phase)}`
-    : 'Aktuell laeuft eine Physio-Session.'
+    ? outputLanguage === 'en'
+      ? `Current exercise: ${input.currentExercise.name}. Description: ${input.currentExercise.description ?? 'no extra description'}. Phase: ${input.currentExercise.phase ?? 'main'}. ${getPhaseHint(input.currentExercise.phase, outputLanguage)}`
+      : `Aktuelle Uebung: ${input.currentExercise.name}. Beschreibung: ${input.currentExercise.description ?? 'keine zusaetzliche Beschreibung'}. Phase: ${input.currentExercise.phase ?? 'main'}. ${getPhaseHint(input.currentExercise.phase, outputLanguage)}`
+    : outputLanguage === 'en'
+      ? 'A physiotherapy session is currently in progress.'
+      : 'Aktuell laeuft eine Physio-Session.'
   const workoutStateMessage = input.workoutState
     ? `WorkoutState: ${JSON.stringify({
         status: input.workoutState.status,
@@ -192,7 +213,9 @@ async function buildVoiceOrchestrationPrompt(
         exercises: input.workoutState.exercises,
       })}`
     : null
-  const responseStyleMessage = 'Antwortstil: antworte passend zum aktuellen Coaching-Modus, konkret, ohne Markdown und ohne ueberspielte Rhetorik.'
+  const responseStyleMessage = outputLanguage === 'en'
+    ? 'Response style: answer for the current coaching mode, concretely, without markdown and without overblown rhetoric.'
+    : 'Antwortstil: antworte passend zum aktuellen Coaching-Modus, konkret, ohne Markdown und ohne ueberspielte Rhetorik.'
 
   const messages = [
     { role: 'user' as const, content: contextMessage },
@@ -324,5 +347,46 @@ function toSessionMemoryContext(snapshot: CoachingMemorySnapshot): SessionMemory
     personalityHints,
     patternHints,
     lifeContext: snapshot.lifeContext,
+  }
+}
+
+function asVoicePersonality(value: unknown): Pick<UserPersonality, 'coach_persona' | 'feedback_style' | 'language'> | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const coachPersona = typeof value.coach_persona === 'string' ? value.coach_persona : null
+  const feedbackStyle = value.feedback_style === 'direct'
+    || value.feedback_style === 'gentle'
+    || value.feedback_style === 'energetic'
+    ? value.feedback_style
+    : null
+  const language = value.language === 'de' || value.language === 'en'
+    ? value.language
+    : null
+
+  if (!coachPersona || !feedbackStyle || !language) {
+    return null
+  }
+
+  return {
+    coach_persona: coachPersona,
+    feedback_style: feedbackStyle,
+    language,
+  }
+}
+
+function mergeVoicePersonality(
+  personality: Pick<UserPersonality, 'coach_persona' | 'feedback_style' | 'language'> | null,
+  languageOverride?: Language,
+): Pick<UserPersonality, 'coach_persona' | 'feedback_style' | 'language'> | null {
+  if (!personality && !languageOverride) {
+    return null
+  }
+
+  return {
+    coach_persona: personality?.coach_persona ?? 'tony_robbins',
+    feedback_style: personality?.feedback_style ?? 'gentle',
+    language: languageOverride ?? personality?.language ?? 'de',
   }
 }
