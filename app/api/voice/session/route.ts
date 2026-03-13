@@ -34,7 +34,10 @@ export async function POST(request: Request) {
       reply: result.reply,
       llmLatencyMs: result.llmLatencyMs,
     })
-  } catch {
-    return NextResponse.json({ error: 'Voice orchestration failed' }, { status: 502 })
+  } catch (error) {
+    console.error('Voice session orchestration failed', error)
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Voice orchestration failed',
+    }, { status: 502 })
   }
 }

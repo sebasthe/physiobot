@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { VoiceSession } from '../core/VoiceSession'
 import type { TranscriptMessage, TurnContext, TurnState, VoiceConfig } from '../core/types'
+import type { TurnMetricsPayload } from '@/lib/telemetry/voice-metrics'
 import type { LLMProvider } from '../providers/llm/LLMProvider'
 import type { STTProvider } from '../providers/stt/STTProvider'
 import type { TTSProvider } from '../providers/tts/TTSProvider'
@@ -15,6 +16,7 @@ interface UseVoiceSessionConfig {
   onToolCall?: (tool: { name: string; input: Record<string, unknown> }) => void
   onPartialTranscript?: (text: string) => void
   onCommittedTranscript?: (text: string) => void
+  onMetrics?: (metrics: TurnMetricsPayload) => void
   onError?: (error: Error) => void
 }
 
@@ -35,6 +37,7 @@ export function useVoiceSession({
   onToolCall,
   onPartialTranscript,
   onCommittedTranscript,
+  onMetrics,
   onError,
 }: UseVoiceSessionConfig): UseVoiceSessionReturn {
   const sessionRef = useRef<VoiceSession | null>(null)
@@ -51,6 +54,10 @@ export function useVoiceSession({
 
   const handleCommittedTranscript = useEffectEvent((text: string) => {
     onCommittedTranscript?.(text)
+  })
+
+  const handleMetrics = useEffectEvent((metrics: TurnMetricsPayload) => {
+    onMetrics?.(metrics)
   })
 
   const handleError = useEffectEvent((error: Error) => {
@@ -79,6 +86,10 @@ export function useVoiceSession({
 
     session.on('committedTranscript', text => {
       handleCommittedTranscript(text)
+    })
+
+    session.on('metrics', metrics => {
+      handleMetrics(metrics)
     })
 
     session.on('error', error => {

@@ -1,4 +1,5 @@
 import type { TranscriptMessage, TurnState } from './types'
+import type { TurnMetricsPayload } from '@/lib/telemetry/voice-metrics'
 
 export interface VoiceEventMap {
   turnStateChanged: TurnState
@@ -6,6 +7,7 @@ export interface VoiceEventMap {
   transcript: TranscriptMessage
   partialTranscript: string
   committedTranscript: string
+  metrics: TurnMetricsPayload
   error: Error
   interruptRequested: void
   sessionStarted: void

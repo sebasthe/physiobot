@@ -44,6 +44,39 @@ describe('VoiceEventEmitter', () => {
     expect(handler).toHaveBeenCalledWith(expect.any(Error))
   })
 
+  it('emits metrics events', () => {
+    const emitter = new VoiceEventEmitter()
+    const handler = vi.fn()
+
+    emitter.on('metrics', handler)
+    emitter.emit('metrics', {
+      sttToClassification: 20,
+      classificationToFirstToken: 50,
+      llmFirstToken: 70,
+      llmTotal: 120,
+      ttsLatency: 180,
+      totalTurnTime: 220,
+      timestamps: {
+        sttCommitTime: 1,
+        classificationDoneTime: 21,
+        llmFirstTokenTime: 71,
+        llmDoneTime: 121,
+        ttsStartTime: 80,
+        ttsDoneTime: 260,
+      },
+      utteranceCategory: 'question',
+      classificationFastPath: false,
+      commandName: null,
+      skippedReason: null,
+      llmTimedOut: false,
+    })
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      totalTurnTime: 220,
+      utteranceCategory: 'question',
+    }))
+  })
+
   it('off removes listener', () => {
     const emitter = new VoiceEventEmitter()
     const handler = vi.fn()
