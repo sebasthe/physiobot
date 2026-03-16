@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { MotivationStyle, FeedbackStyle, Language } from '@/lib/types'
+import { DEFAULT_USER_PERSONALITY } from '@/lib/user-personality'
 
 interface Question {
   id: string
@@ -54,10 +55,7 @@ const QUESTIONS: Question[] = [
 export default function PersonalityOnboardingPage() {
   const [step, setStep] = useState(0)
   const [selections, setSelections] = useState<Record<string, string>>({
-    motivation_style: 'mixed',
-    feedback_style: 'energetic',
-    coach_persona: 'tony_robbins',
-    language: 'de',
+    ...DEFAULT_USER_PERSONALITY,
   })
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()

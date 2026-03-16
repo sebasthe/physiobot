@@ -123,10 +123,10 @@ export function buildFeedbackPrompt(feedback: SessionFeedback[]): string {
   return `The user gave the following feedback on their last training session:\n${lines.join('\n')}
 
 Please adjust the training plan accordingly:
-- "painful": replace the exercise with a gentler alternative
-- "too_hard": reduce intensity (fewer reps, shorter duration)
-- "too_easy": increase intensity
-- "right": keep the exercise as-is
+- "painful": replace the exercise with a gentler alternative and avoid provoking the same symptoms
+- "too_intense": reduce intensity (fewer reps, shorter duration, or a simpler variation)
+- "manageable": keep the exercise broadly as-is
+- "well_tolerated": keep the exercise as-is; if most exercises are well tolerated, consider a slight progression
 
 Respond with the updated plan in the same JSON format as before. No markdown code blocks.`
 }

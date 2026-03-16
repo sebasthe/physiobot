@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import type { TurnState } from '@/lib/voice-module'
-import type { AuraUniforms } from './aura-shader'
+import type { GlowUniforms } from './shader'
 
-interface AuraProfile {
+interface GlowProfile {
   speed: number
   amplitude: number
   frequency: number
@@ -11,14 +11,14 @@ interface AuraProfile {
   brightness: number
 }
 
-const PROFILES: Record<string, AuraProfile> = {
+const PROFILES: Record<string, GlowProfile> = {
   idle: { speed: 8, amplitude: 0.4, frequency: 0.35, scale: 0.22, blur: 1.0, brightness: 0.5 },
   listening: { speed: 20, amplitude: 0.65, frequency: 0.7, scale: 0.28, blur: 0.6, brightness: 1.4 },
   processing: { speed: 28, amplitude: 0.35, frequency: 0.9, scale: 0.25, blur: 0.8, brightness: 1.2 },
   speaking: { speed: 55, amplitude: 0.6, frequency: 1.1, scale: 0.3, blur: 0.4, brightness: 1.6 },
 }
 
-const INACTIVE_PROFILE: AuraProfile = {
+const INACTIVE_PROFILE: GlowProfile = {
   speed: 6, amplitude: 0.25, frequency: 0.3, scale: 0.2, blur: 1.2, brightness: 0.4,
 }
 
@@ -35,13 +35,13 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v))
 }
 
-export type AnimatedAuraUniforms = Omit<AuraUniforms, 'uTime' | 'uResolution'>
+export type AnimatedGlowUniforms = Omit<GlowUniforms, 'uTime' | 'uResolution'>
 
-export function useAuraAnimation(
+export function useGlowAnimation(
   state: TurnState,
   active: boolean,
   intensity?: number,
-): AnimatedAuraUniforms {
+): AnimatedGlowUniforms {
   return useMemo(() => {
     const profile = active ? (PROFILES[state] ?? PROFILES.idle) : INACTIVE_PROFILE
     const color = active ? (STATE_COLORS[state] ?? ACCENT_COLOR) : ACCENT_COLOR

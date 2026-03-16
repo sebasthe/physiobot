@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import VoiceAuraTimerFrame from '@/components/training/VoiceAuraTimerFrame'
+import VoiceGlowFrame from '@/components/training/VoiceGlowFrame'
 
-describe('VoiceAuraTimerFrame', () => {
+describe('VoiceGlowFrame', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -19,25 +19,25 @@ describe('VoiceAuraTimerFrame', () => {
     })
   })
 
-  it('renders the static timer frame when aura is inactive', () => {
+  it('renders the static timer frame when glow is inactive', () => {
     render(
-      <VoiceAuraTimerFrame active={false} state="idle">
+      <VoiceGlowFrame active={false} state="idle">
         <span>30</span>
-      </VoiceAuraTimerFrame>,
+      </VoiceGlowFrame>,
     )
 
     expect(screen.getByTestId('timer-ring-fallback')).toBeInTheDocument()
     expect(screen.getByText('30')).toBeInTheDocument()
   })
 
-  it('renders the animated aura frame when voice is active', () => {
+  it('renders the animated glow frame when voice is active', () => {
     render(
-      <VoiceAuraTimerFrame active state="speaking">
+      <VoiceGlowFrame active state="speaking">
         <span>12</span>
-      </VoiceAuraTimerFrame>,
+      </VoiceGlowFrame>,
     )
 
-    expect(screen.getByTestId('voice-aura-frame')).toBeInTheDocument()
+    expect(screen.getByTestId('voice-glow-frame')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
   })
 })

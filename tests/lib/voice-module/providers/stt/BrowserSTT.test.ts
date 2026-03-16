@@ -84,4 +84,29 @@ describe('BrowserSTT', () => {
     expect(handler).toHaveBeenCalledWith(true)
     expect(handler).toHaveBeenCalledWith(false)
   })
+
+  it('suppresses benign browser recognition errors', async () => {
+    const handler = vi.fn()
+    stt.onError = handler
+
+    await stt.start()
+
+    const recognition = (stt as unknown as { recognition: MockSpeechRecognition | null }).recognition
+    recognition?.onerror?.({ error: 'no-speech' })
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('suppresses the abort error triggered by an intentional stop', async () => {
+    const handler = vi.fn()
+    stt.onError = handler
+
+    await stt.start()
+    const recognition = (stt as unknown as { recognition: MockSpeechRecognition | null }).recognition
+
+    stt.stop()
+    recognition?.onerror?.({ error: 'aborted' })
+
+    expect(handler).not.toHaveBeenCalled()
+  })
 })

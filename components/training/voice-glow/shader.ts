@@ -1,18 +1,16 @@
 /**
- * Aura voice visualizer — WebGL shader module.
+ * Voice glow visualizer — WebGL shader module.
  *
- * Technique: SDF circle + 4-layer turbulence displacement + smoothstep edge +
+ * SDF circle + layered turbulence displacement + smoothstep edge +
  * bloom accumulation + Reinhard tonemapping + dithering.
- * Inspired by the general approach of SDF-based aurora shaders.
- * All code written from scratch for PhysioCoach.
  */
 
-export interface AuraUniformDef {
+export interface GlowUniformDef {
   type: '1f' | '2f' | '3f'
   default: number | [number, number] | [number, number, number]
 }
 
-export interface AuraUniforms {
+export interface GlowUniforms {
   uTime: number
   uSpeed: number
   uAmplitude: number
@@ -25,7 +23,7 @@ export interface AuraUniforms {
   uResolution: [number, number]
 }
 
-export const UNIFORM_DEFS: Record<keyof AuraUniforms, AuraUniformDef> = {
+export const UNIFORM_DEFS: Record<keyof GlowUniforms, GlowUniformDef> = {
   uTime: { type: '1f', default: 0 },
   uSpeed: { type: '1f', default: 10 },
   uAmplitude: { type: '1f', default: 0.5 },

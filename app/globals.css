@@ -156,29 +156,6 @@
 }
 
 @layer utilities {
-  @keyframes voice-aura-spin {
-    from {
-      transform: rotate(0deg);
-    }
-
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes voice-aura-breathe {
-    0%,
-    100% {
-      transform: scale(0.985);
-      opacity: 0.7;
-    }
-
-    50% {
-      transform: scale(1.04);
-      opacity: 0.95;
-    }
-  }
-
   .font-display {
     font-family: var(--font-display), "Bebas Neue", sans-serif;
     letter-spacing: 0.015em;

@@ -3,10 +3,10 @@ import {
   FRAGMENT_SHADER,
   VERTEX_SHADER,
   UNIFORM_DEFS,
-  type AuraUniforms,
-} from '@/components/training/aura/aura-shader'
+  type GlowUniforms,
+} from '@/components/training/voice-glow/shader'
 
-describe('aura-shader', () => {
+describe('voice-glow shader', () => {
   it('exports a non-empty fragment shader string', () => {
     expect(typeof FRAGMENT_SHADER).toBe('string')
     expect(FRAGMENT_SHADER.length).toBeGreaterThan(100)
@@ -18,7 +18,7 @@ describe('aura-shader', () => {
     expect(VERTEX_SHADER).toContain('gl_Position')
   })
 
-  it('exports uniform definitions matching AuraUniforms keys', () => {
+  it('exports uniform definitions matching GlowUniforms keys', () => {
     const keys = Object.keys(UNIFORM_DEFS)
     expect(keys).toContain('uTime')
     expect(keys).toContain('uSpeed')

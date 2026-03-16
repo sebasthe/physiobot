@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { useAuraAnimation } from '@/components/training/aura/useAuraAnimation'
+import { useGlowAnimation } from '@/components/training/voice-glow/useGlowAnimation'
 import type { TurnState } from '@/lib/voice-module'
 
 beforeEach(() => {
   vi.useFakeTimers()
 })
 
-describe('useAuraAnimation', () => {
+describe('useGlowAnimation', () => {
   it('returns shader uniforms object', () => {
-    const { result } = renderHook(() => useAuraAnimation('idle', false))
+    const { result } = renderHook(() => useGlowAnimation('idle', false))
     const u = result.current
 
     expect(u).toHaveProperty('uSpeed')
@@ -23,13 +23,13 @@ describe('useAuraAnimation', () => {
   })
 
   it('returns low energy values when inactive', () => {
-    const { result } = renderHook(() => useAuraAnimation('idle', false))
+    const { result } = renderHook(() => useGlowAnimation('idle', false))
     expect(result.current.uSpeed).toBeLessThan(15)
     expect(result.current.uBrightness).toBeLessThanOrEqual(0.6)
   })
 
   it('returns higher energy for speaking state', () => {
-    const { result } = renderHook(() => useAuraAnimation('speaking', true))
+    const { result } = renderHook(() => useGlowAnimation('speaking', true))
     expect(result.current.uSpeed).toBeGreaterThan(30)
     expect(result.current.uBrightness).toBeGreaterThan(1.0)
   })
@@ -37,7 +37,7 @@ describe('useAuraAnimation', () => {
   it('returns different profiles for each active state', () => {
     const states: TurnState[] = ['idle', 'listening', 'processing', 'speaking']
     const results = states.map(state => {
-      const { result } = renderHook(() => useAuraAnimation(state, true))
+      const { result } = renderHook(() => useGlowAnimation(state, true))
       return result.current
     })
 
@@ -47,7 +47,7 @@ describe('useAuraAnimation', () => {
   })
 
   it('uses accent color by default', () => {
-    const { result } = renderHook(() => useAuraAnimation('idle', false))
+    const { result } = renderHook(() => useGlowAnimation('idle', false))
     const [r, g, b] = result.current.uColor
     expect(r).toBeCloseTo(0.165, 1)
     expect(g).toBeCloseTo(0.616, 1)
@@ -55,8 +55,8 @@ describe('useAuraAnimation', () => {
   })
 
   it('respects external intensity override', () => {
-    const { result: low } = renderHook(() => useAuraAnimation('speaking', true, 0.1))
-    const { result: high } = renderHook(() => useAuraAnimation('speaking', true, 0.9))
+    const { result: low } = renderHook(() => useGlowAnimation('speaking', true, 0.1))
+    const { result: high } = renderHook(() => useGlowAnimation('speaking', true, 0.9))
     expect(high.current.uScale).toBeGreaterThan(low.current.uScale)
   })
 })
