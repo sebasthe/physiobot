@@ -28,7 +28,6 @@ const PHASE_LABELS: Record<Exercise['phase'], string> = {
 const FEEDBACK_OPTIONS: Array<{
   value: SessionFeedback['difficulty']
   label: string
-  helper: string
   icon: LucideIcon
   color: string
   background: string
@@ -36,7 +35,6 @@ const FEEDBACK_OPTIONS: Array<{
   {
     value: 'well_tolerated',
     label: 'Gut vertragen',
-    helper: 'lief ruhig und passend',
     icon: CheckCircle2,
     color: '#63CDB9',
     background: 'rgba(99,205,185,0.14)',
@@ -44,7 +42,6 @@ const FEEDBACK_OPTIONS: Array<{
   {
     value: 'manageable',
     label: 'Noch okay',
-    helper: 'fordernd, aber machbar',
     icon: Activity,
     color: '#63B2FF',
     background: 'rgba(99,178,255,0.14)',
@@ -52,7 +49,6 @@ const FEEDBACK_OPTIONS: Array<{
   {
     value: 'too_intense',
     label: 'Zu intensiv',
-    helper: 'bitte leichter planen',
     icon: Flame,
     color: '#F0A04B',
     background: 'rgba(240,160,75,0.14)',
@@ -60,36 +56,11 @@ const FEEDBACK_OPTIONS: Array<{
   {
     value: 'painful',
     label: 'Beschwerden',
-    helper: 'Schmerz oder Reizung',
     icon: AlertTriangle,
     color: '#E85D5D',
     background: 'rgba(232,93,93,0.14)',
   },
 ] as const
-
-function formatExerciseDose(exercise: Exercise) {
-  const parts: string[] = []
-
-  if (exercise.sets) {
-    parts.push(`${exercise.sets} Saetze`)
-  }
-  if (exercise.repetitions) {
-    parts.push(`${exercise.repetitions} Wdh.`)
-  }
-  if (exercise.duration_seconds) {
-    const minutes = Math.floor(exercise.duration_seconds / 60)
-    const seconds = exercise.duration_seconds % 60
-    if (minutes > 0 && seconds > 0) {
-      parts.push(`${minutes} Min. ${seconds} Sek.`)
-    } else if (minutes > 0) {
-      parts.push(`${minutes} Min.`)
-    } else {
-      parts.push(`${seconds} Sek.`)
-    }
-  }
-
-  return parts.join(' · ')
-}
 
 function FeedbackForm() {
   const [feedbacks, setFeedbacks] = useState<SessionFeedback[]>([])
@@ -187,12 +158,6 @@ function FeedbackForm() {
   const updateFeedback = (index: number, difficulty: SessionFeedback['difficulty']) => {
     setFeedbacks(prev => prev.map((feedback, itemIndex) => (
       itemIndex === index ? { ...feedback, difficulty } : feedback
-    )))
-  }
-
-  const updateFeedbackNote = (index: number, notes: string) => {
-    setFeedbacks(prev => prev.map((feedback, itemIndex) => (
-      itemIndex === index ? { ...feedback, notes } : feedback
     )))
   }
 
@@ -297,82 +262,61 @@ function FeedbackForm() {
 
             {loaded && reviewExercises.map((exercise, index) => {
               const selected = feedbacks[index]?.difficulty
-              const showNotes = selected === 'too_intense' || selected === 'painful'
+              const selectedOption = FEEDBACK_OPTIONS.find(option => option.value === selected) ?? FEEDBACK_OPTIONS[0]
+              const SelectedIcon = selectedOption.icon
               return (
                 <article
                   key={`${exercise.name}-${index}`}
-                  className="glass-card animate-slide-up rounded-[1.35rem] px-4 py-3.5 shadow-[0_18px_40px_rgba(0,0,0,0.16)]"
+                  className="glass-card animate-slide-up rounded-[1.15rem] px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)]"
                   style={{ animationDelay: `${index * 60}ms`, animationFillMode: 'both' }}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-[0.22em] text-white/32">
-                        <span>Übung {index + 1} von {reviewExercises.length}</span>
-                        {formatExerciseDose(exercise) && <span>{formatExerciseDose(exercise)}</span>}
+                  <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/28">
+                        {index + 1}
                       </div>
-                      <h2 className="font-display text-[1.55rem] uppercase leading-[0.94] tracking-[0.01em] text-white">
+                      <h2 className="min-w-0 truncate font-display text-[1.15rem] uppercase leading-none tracking-[0.01em] text-white">
                         {exercise.name}
                       </h2>
-                      {exercise.description && (
-                        <p className="mt-1 text-sm leading-6 text-white/44">
-                          {exercise.description}
-                        </p>
-                      )}
+                      <div className="shrink-0 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-white/34">
+                        {PHASE_LABELS[exercise.phase]}
+                      </div>
                     </div>
-                    <div className="shrink-0 rounded-full border border-white/8 bg-white/4 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-white/38">
-                      {PHASE_LABELS[exercise.phase]}
-                    </div>
-                  </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {FEEDBACK_OPTIONS.map(option => {
-                      const Icon = option.icon
-                      const isSelected = selected === option.value
-                      return (
-                        <button
-                          key={option.value}
-                          onClick={() => updateFeedback(index, option.value)}
-                          className="flex min-h-[3.65rem] flex-col items-center justify-center gap-1 rounded-[0.95rem] border px-2 py-2.5 text-center transition-all"
-                          style={{
-                            background: isSelected ? option.background : 'rgba(255,255,255,0.03)',
-                            borderColor: isSelected ? option.color : 'rgba(255,255,255,0.08)',
-                            color: isSelected ? option.color : 'rgba(255,255,255,0.32)',
-                            boxShadow: isSelected ? `0 10px 24px ${option.color}18` : 'none',
-                            transform: isSelected ? 'translateY(-1px)' : 'translateY(0)',
-                          }}
-                        >
-                          <Icon size={18} strokeWidth={isSelected ? 2.4 : 2} />
-                          <span className="text-[9px] font-semibold uppercase tracking-[0.16em]">
-                            {option.label}
-                          </span>
-                          <span className="text-[8px] uppercase tracking-[0.12em] text-current/70">
-                            {option.helper}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  {showNotes && (
-                    <div className="mt-3">
-                      <label
-                        htmlFor={`feedback-note-${index}`}
-                        className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-white/34"
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div
+                        className="hidden min-w-[6.3rem] items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.14em] sm:flex"
+                        style={{ color: selectedOption.color }}
                       >
-                        {selected === 'painful' ? 'Wo gab es Beschwerden?' : 'Was war zu intensiv?'}
-                      </label>
-                      <textarea
-                        id={`feedback-note-${index}`}
-                        rows={2}
-                        value={feedbacks[index]?.notes ?? ''}
-                        onChange={event => updateFeedbackNote(index, event.target.value)}
-                        placeholder={selected === 'painful'
-                          ? 'z. B. Ziehen an der Schulter, Druck im Knie'
-                          : 'z. B. zu viele Wiederholungen, zu wenig Pause'}
-                        className="w-full rounded-[1rem] border border-white/10 bg-[rgba(255,255,255,0.03)] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/24 focus:border-[var(--accent)] focus:bg-[rgba(255,255,255,0.05)]"
-                      />
+                        <SelectedIcon size={12} strokeWidth={2.2} />
+                        <span>{selectedOption.label}</span>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1 rounded-full border border-white/8 bg-[rgba(255,255,255,0.03)] p-1">
+                        {FEEDBACK_OPTIONS.map(option => {
+                          const Icon = option.icon
+                          const isSelected = selected === option.value
+                          return (
+                            <button
+                              key={option.value}
+                              onClick={() => updateFeedback(index, option.value)}
+                              aria-label={`${exercise.name}: ${option.label}`}
+                              title={option.label}
+                              className="flex h-8 w-8 items-center justify-center rounded-full border transition-all"
+                              style={{
+                                background: isSelected ? option.background : 'transparent',
+                                borderColor: isSelected ? option.color : 'rgba(255,255,255,0.05)',
+                                color: isSelected ? option.color : 'rgba(255,255,255,0.24)',
+                                boxShadow: isSelected ? `0 8px 18px ${option.color}16` : 'none',
+                              }}
+                            >
+                              <Icon size={14} strokeWidth={isSelected ? 2.4 : 2} />
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </article>
               )
             })}

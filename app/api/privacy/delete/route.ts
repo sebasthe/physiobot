@@ -1,6 +1,7 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import MemoryClient from 'mem0ai'
 import { NextResponse } from 'next/server'
+import { deleteUserAppData } from '@/lib/privacy/account-delete'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
 interface Mem0Client {
@@ -20,41 +21,41 @@ export async function POST() {
 
   await mem0.deleteAll({ user_id: user.id }).catch(() => undefined)
 
+  const adminClient = createAdminClient()
   let deletedAuthUser = false
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  let authDeletionError: string | null = null
 
-  if (supabaseUrl && serviceRoleKey) {
-    const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-
+  if (adminClient) {
     const { error } = await adminClient.auth.admin.deleteUser(user.id)
     deletedAuthUser = !error
+    authDeletionError = error?.message ?? null
+  } else {
+    authDeletionError = 'SUPABASE_SECRET_KEY ist nicht konfiguriert.'
   }
 
   if (!deletedAuthUser) {
-    await Promise.all([
-      supabase.from('pain_log').delete().eq('user_id', user.id),
-      supabase.from('voice_telemetry_events').delete().eq('user_id', user.id),
-      supabase.from('sessions').delete().eq('user_id', user.id),
-      supabase.from('health_profiles').delete().eq('user_id', user.id),
-      supabase.from('schedules').delete().eq('user_id', user.id),
-      supabase.from('streaks').delete().eq('user_id', user.id),
-      supabase.from('user_personality').delete().eq('user_id', user.id),
-      supabase
-        .from('profiles')
-        .update({
-          active_plan_id: null,
-          name: null,
-          address: null,
-          privacy_consent: 'none',
-        })
-        .eq('id', user.id),
-    ]).catch(() => undefined)
+    const cleanupClient = adminClient ?? supabase
+    const { errors } = await deleteUserAppData(cleanupClient, user.id)
+
+    await supabase.auth.signOut().catch(() => undefined)
+
+    if (errors.length > 0) {
+      console.error('Account deletion cleanup failed', { userId: user.id, errors })
+      return NextResponse.json(
+        { error: 'Kontodaten konnten nicht vollstaendig geloescht werden.' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(
+      {
+        error: authDeletionError
+          ? `Konto konnte nicht vollstaendig geloescht werden. ${authDeletionError}`
+          : 'Konto konnte nicht vollstaendig geloescht werden.',
+        deletedAuthUser: false,
+      },
+      { status: 503 }
+    )
   }
 
   await supabase.auth.signOut().catch(() => undefined)
