@@ -8,7 +8,9 @@
     "start": "next start",
     "test": "vitest",
     "test:run": "vitest run",
-    "voice:debug": "node scripts/voice-session-debug.mjs"
+    "voice:debug": "node scripts/voice-session-debug.mjs",
+    "docs:serve": "./.venv-docs/bin/mkdocs serve",
+    "docs:build": "./.venv-docs/bin/mkdocs build --strict"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.1",

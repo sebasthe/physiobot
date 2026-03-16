@@ -1,0 +1,72 @@
+site_name: PhysioBot Docs
+site_description: Architecture and design decision documentation for PhysioBot
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: teal
+      accent: amber
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra_javascript:
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
+
+exclude_docs: |
+  plans/**
+  backlog/**
+  superpowers/**
+  **/.DS_Store
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - architecture/index.md
+      - System Overview: architecture/system-overview.md
+      - Training Plan Lifecycle: architecture/training-plan-lifecycle.md
+      - AI-Generated Text and Cost Drivers: architecture/ai-generated-text-and-cost-drivers.md
+      - Privacy and Data Handling: architecture/privacy-and-data-handling.md
+      - Physio Mode and Safety: architecture/physio-mode-and-safety.md
+      - Memory Architecture: architecture/memory-architecture.md
+      - Data Model and Storage: architecture/data-model-and-storage.md
+      - Scheduling and Reminders: architecture/scheduling-and-reminders.md
+      - Gamification: architecture/gamification.md
+      - Voice Mode - Current Architecture: architecture/2026-03-10-voice-mode-current-architecture.md
+      - Voice Orchestration: architecture/voice-orchestration.md
+      - Voice Tool Execution: architecture/voice-tool-execution.md
+      - Voice Provider Matrix: architecture/voice-provider-matrix.md
+      - Voice Telemetry and Observability: architecture/voice-telemetry-and-observability.md
+  - Decisions:
+      - adr/index.md
+      - ADR-0001 Documentation Scope and Portal: adr/ADR-0001-documentation-scope-and-portal.md
+      - ADR-0002 Privacy Consent and Data Classification: adr/ADR-0002-privacy-consent-and-data-classification.md
+      - ADR-0003 Physio Safety Boundaries: adr/ADR-0003-physio-safety-boundaries.md
+      - ADR-0004 Derived Coaching Memory: adr/ADR-0004-derived-coaching-memory.md
+      - ADR-0005 Mode-Based Voice Orchestration: adr/ADR-0005-mode-based-voice-orchestration.md
+      - ADR-0006 Kokoro Local TTS: adr/ADR-0006-kokoro-local-tts.md
