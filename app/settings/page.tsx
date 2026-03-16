@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import TransitionLink from '@/components/navigation/TransitionLink'
 import { createClient } from '@/lib/supabase/server'
 import type { Language, PrivacyConsent, Schedule } from '@/lib/types'
+import { DEFAULT_USER_PERSONALITY } from '@/lib/user-personality'
 import SettingsClient from './SettingsClient'
 
 interface PhysioInfo {
@@ -92,7 +93,7 @@ export default async function SettingsPage() {
           initialEmail={user.email ?? ''}
           initialName={typedProfile.name ?? ''}
           initialSchedule={(schedule as Schedule | null) ?? null}
-          initialLanguage={(personality?.language as Language) ?? 'de'}
+          initialLanguage={(personality?.language as Language) ?? DEFAULT_USER_PERSONALITY.language}
           initialPrivacyConsent={typedProfile.privacy_consent ?? 'full'}
           physioInfo={physioInfo}
           isSelfCreatedPlan={isSelfCreatedPlan}

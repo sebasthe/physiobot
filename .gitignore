@@ -21,6 +21,8 @@
 
 # production
 /build
+/site
+/.venv-docs
 
 # misc
 .DS_Store

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { useSoftNavigation } from '@/lib/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Language, PrivacyConsent, Schedule } from '@/lib/types'
+import { saveUserLanguagePreference } from '@/lib/user-personality'
 
 interface PhysioInfo {
   id: string
@@ -126,17 +127,15 @@ export default function SettingsClient({
   }
 
   const saveLanguage = async (newLanguage: Language) => {
+    const previousLanguage = language
     setLanguage(newLanguage)
     setLanguageLoading(true)
     setLanguageMessage(undefined)
 
-    const { error } = await supabase
-      .from('user_personality')
-      .update({ language: newLanguage })
-      .eq('user_id', userId)
+    const { error } = await saveUserLanguagePreference(supabase, userId, newLanguage)
 
     if (error) {
-      setLanguage(language)
+      setLanguage(previousLanguage)
       setLanguageMessage('Sprache konnte nicht gespeichert werden.')
     } else {
       setLanguageMessage(newLanguage === 'de' ? 'Sprache gespeichert.' : 'Language saved.')
