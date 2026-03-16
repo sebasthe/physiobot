@@ -4,7 +4,7 @@ import { Calendar, Mail, ShieldPlus, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useSoftNavigation } from '@/lib/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Schedule } from '@/lib/types'
+import type { Language, Schedule } from '@/lib/types'
 
 interface PhysioInfo {
   id: string
@@ -17,6 +17,7 @@ interface Props {
   initialEmail: string
   initialName: string
   initialSchedule: Schedule | null
+  initialLanguage: Language
   physioInfo: PhysioInfo | null
   isSelfCreatedPlan: boolean
 }
@@ -41,6 +42,7 @@ export default function SettingsClient({
   initialEmail,
   initialName,
   initialSchedule,
+  initialLanguage,
   physioInfo,
   isSelfCreatedPlan,
 }: Props) {
@@ -56,12 +58,15 @@ export default function SettingsClient({
   const [email, setEmail] = useState(initialEmail)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [language, setLanguage] = useState<Language>(initialLanguage)
 
   const [scheduleMessage, setScheduleMessage] = useState<string>()
+  const [languageMessage, setLanguageMessage] = useState<string>()
   const [profileMessage, setProfileMessage] = useState<string>()
   const [emailMessage, setEmailMessage] = useState<string>()
   const [passwordMessage, setPasswordMessage] = useState<string>()
   const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [languageLoading, setLanguageLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
@@ -100,6 +105,27 @@ export default function SettingsClient({
       setScheduleMessage('Rhythmus gespeichert.')
     }
     setScheduleLoading(false)
+  }
+
+  const saveLanguage = async (newLanguage: Language) => {
+    setLanguage(newLanguage)
+    setLanguageLoading(true)
+    setLanguageMessage(undefined)
+
+    const { error } = await supabase
+      .from('user_personality')
+      .upsert(
+        { user_id: userId, language: newLanguage },
+        { onConflict: 'user_id' }
+      )
+
+    if (error) {
+      setLanguage(language)
+      setLanguageMessage('Sprache konnte nicht gespeichert werden.')
+    } else {
+      setLanguageMessage(newLanguage === 'de' ? 'Sprache gespeichert.' : 'Language saved.')
+    }
+    setLanguageLoading(false)
   }
 
   const saveName = async () => {
@@ -203,6 +229,44 @@ export default function SettingsClient({
             {scheduleLoading ? 'Speichern...' : 'Rhythmus speichern'}
           </button>
           {scheduleMessage && <p className="mt-3 text-xs text-white/40">{scheduleMessage}</p>}
+        </div>
+      </section>
+
+      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
+        <div className="p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">Coach-Sprache</h2>
+        </div>
+        <div className="px-6 pb-6 pt-0">
+          <p className="mb-4 text-xs text-white/40">
+            {language === 'de'
+              ? 'In welcher Sprache soll dein Coach mit dir sprechen?'
+              : 'Which language should your coach use?'}
+          </p>
+          <div className="flex gap-3">
+            {([
+              { value: 'de' as Language, label: 'Deutsch', flag: '🇩🇪' },
+              { value: 'en' as Language, label: 'English', flag: '🇬🇧' },
+            ]).map(({ value, label, flag }) => {
+              const active = language === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={languageLoading}
+                  onClick={() => saveLanguage(value)}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-4 text-sm font-semibold transition-all disabled:opacity-60 ${
+                    active
+                      ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)] text-[var(--accent)]'
+                      : 'border-white/10 text-white/40 hover:border-white/20 hover:text-white/60'
+                  }`}
+                >
+                  <span>{flag}</span>
+                  <span>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+          {languageMessage && <p className="mt-3 text-xs text-white/40">{languageMessage}</p>}
         </div>
       </section>
 

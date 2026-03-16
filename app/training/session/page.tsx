@@ -1,22 +1,18 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { createVoiceProvider } from '@/lib/voice'
 import SessionPlayer from '@/components/training/SessionPlayer'
-import type { Exercise } from '@/lib/types'
+import type { Exercise, Language } from '@/lib/types'
 import type { TranscriptMessage } from '@/lib/mem0'
 
 export default function TrainingSessionPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [sessionId, setSessionId] = useState<string>()
+  const [sessionNumber, setSessionNumber] = useState(1)
+  const [coachLanguage, setCoachLanguage] = useState<Language>('de')
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-  const voiceRef = useRef<ReturnType<typeof createVoiceProvider> | null>(null)
-  if (!voiceRef.current) {
-    voiceRef.current = createVoiceProvider()
-  }
-  const voice = voiceRef.current
 
   useEffect(() => {
     loadPlan().catch(err => {
@@ -37,6 +33,12 @@ export default function TrainingSessionPage() {
       .eq('id', user.id)
       .single()
 
+    const { data: personality } = await supabase
+      .from('user_personality')
+      .select('language')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
     if (!profile?.active_plan_id) { router.push('/dashboard'); return }
 
     const { data: plan } = await supabase
@@ -46,6 +48,12 @@ export default function TrainingSessionPage() {
       .single()
 
     if (!plan) { router.push('/dashboard'); return }
+
+    const { count } = await supabase
+      .from('sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    setSessionNumber((count ?? 0) + 1)
 
     const { data: session, error: sessionError } = await supabase
       .from('sessions')
@@ -61,18 +69,12 @@ export default function TrainingSessionPage() {
     } else {
       setSessionId(session.id)
     }
+    setCoachLanguage(personality?.language === 'en' ? 'en' : 'de')
     setExercises(plan.exercises as Exercise[])
     setIsLoading(false)
   }
 
-  const handleComplete = async () => {
-    voice.stop()
-    const query = sessionId ? `?session=${sessionId}` : ''
-    router.push(`/training/feedback${query}`)
-  }
-
   const handleSessionComplete = async (payload: { transcript: TranscriptMessage[]; completedExercises: Exercise[] }) => {
-    voice.stop()
     if (typeof window !== 'undefined') {
       const storageKey = sessionId ? `session-transcript:${sessionId}` : 'session-transcript:pending'
       window.sessionStorage.setItem(storageKey, JSON.stringify(payload))
@@ -101,9 +103,9 @@ export default function TrainingSessionPage() {
     <SessionPlayer
       exercises={exercises}
       onComplete={handleSessionComplete}
-      speak={(text) => voice.speak(text)}
-      stopSpeaking={() => voice.stop()}
       sessionId={sessionId}
+      sessionNumber={sessionNumber}
+      coachLanguage={coachLanguage}
     />
   )
 }

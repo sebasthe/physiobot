@@ -8,6 +8,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   'audio_started',
   'interrupt',
   'fallback_mode',
+  'turn_metrics',
   'voice_error',
 ])
 

@@ -160,7 +160,12 @@ function FeedbackForm() {
 
   return (
     <main className="feedback-page vital-gradient relative min-h-screen overflow-x-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(42,157,138,0.16),transparent_34%)]" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: 'radial-gradient(circle at top, rgba(42, 157, 138, 0.16), transparent 34%)',
+        }}
+      />
 
       <div className="feedback-page__shell relative z-10 mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pb-[calc(8.5rem+var(--safe-bottom))] pt-8 md:max-w-3xl md:px-6 lg:max-w-6xl lg:px-8 lg:pb-10 lg:pt-10">
         <section className="feedback-page__header animate-slide-up px-2 pb-8 pt-3 text-center md:px-0 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,0.8fr)] lg:items-center lg:gap-10 lg:text-left">

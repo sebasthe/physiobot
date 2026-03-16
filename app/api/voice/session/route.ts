@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { ModeContext } from '@/lib/coach/types'
 import type { TranscriptMessage } from '@/lib/mem0'
+import type { Language } from '@/lib/types'
 import { runVoiceTurnOrchestration } from '@/lib/voice/server-orchestrator'
 
 export async function POST(request: Request) {
@@ -12,6 +14,9 @@ export async function POST(request: Request) {
     messages?: TranscriptMessage[]
     currentExercise?: { name?: string; description?: string; phase?: string }
     sessionNumber?: number
+    exercisePhase?: ModeContext['exercisePhase']
+    exerciseStatus?: ModeContext['exerciseStatus']
+    language?: Language
   }
 
   try {
@@ -20,13 +25,19 @@ export async function POST(request: Request) {
       messages: body.messages,
       currentExercise: body.currentExercise,
       sessionNumber: body.sessionNumber,
+      exercisePhase: body.exercisePhase,
+      exerciseStatus: body.exerciseStatus,
+      language: body.language,
     })
 
     return NextResponse.json({
       reply: result.reply,
       llmLatencyMs: result.llmLatencyMs,
     })
-  } catch {
-    return NextResponse.json({ error: 'Voice orchestration failed' }, { status: 502 })
+  } catch (error) {
+    console.error('Voice session orchestration failed', error)
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Voice orchestration failed',
+    }, { status: 502 })
   }
 }
