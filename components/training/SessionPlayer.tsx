@@ -552,6 +552,11 @@ export default function SessionPlayer({
     }
 
     const unlockAudio = () => {
+      void ttsProvider.prepare?.().catch(error => {
+        recordVoiceDebugEvent('session-player.audio.prepare.error', {
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
       setHasAudioInteraction(true)
       recordVoiceDebugEvent('session-player.audio.unlocked', {})
     }
@@ -565,7 +570,7 @@ export default function SessionPlayer({
       window.removeEventListener('keydown', unlockAudio, true)
       window.removeEventListener('touchstart', unlockAudio, true)
     }
-  }, [hasAudioInteraction])
+  }, [hasAudioInteraction, ttsProvider])
 
   const buildTurnContext = (): TurnContext => ({
     systemPrompt: buildDefaultSystemPrompt(effectiveCoachLanguage),
@@ -1306,6 +1311,12 @@ export default function SessionPlayer({
       currentIndex,
       ttsKind,
     })
+    const preparePromise = ttsProvider.prepare?.().catch(error => {
+      recordVoiceDebugEvent('session-player.repeat.prepare.error', {
+        currentIndex,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
     setHasAudioInteraction(true)
     if (turnState !== 'idle' || isCueSpeaking || ttsProvider.isSpeaking()) {
       interrupt()
@@ -1319,6 +1330,7 @@ export default function SessionPlayer({
     setIsCueSpeaking(true)
     try {
       const cue = await requestAdaptiveCue('repeat', currentExercise, currentExerciseState)
+      await preparePromise
       await ttsProvider.speak(cue.text)
       autoCueReadyRef.current = true
 
