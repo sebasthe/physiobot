@@ -14,6 +14,8 @@ const exercises: Exercise[] = [
 
 let mockSpeak: ReturnType<typeof vi.fn>
 let mockCancel: ReturnType<typeof vi.fn>
+let mockResume: ReturnType<typeof vi.fn>
+let mockGetVoices: ReturnType<typeof vi.fn>
 let mockFetch: ReturnType<typeof vi.fn>
 const originalCoachLanguage = process.env.NEXT_PUBLIC_COACH_LANGUAGE
 const originalVoiceProvider = process.env.NEXT_PUBLIC_VOICE_PROVIDER
@@ -71,6 +73,8 @@ describe('SessionPlayer', () => {
       utterance.onend?.()
     })
     mockCancel = vi.fn()
+    mockResume = vi.fn()
+    mockGetVoices = vi.fn().mockReturnValue([])
     MockSpeechRecognition.reset()
     mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -84,12 +88,18 @@ describe('SessionPlayer', () => {
     vi.stubGlobal('speechSynthesis', {
       speak: mockSpeak,
       cancel: mockCancel,
+      resume: mockResume,
+      getVoices: mockGetVoices,
       speaking: false,
+      pending: false,
+      paused: false,
     })
     vi.stubGlobal('SpeechSynthesisUtterance', vi.fn().mockImplementation((text: string) => ({
       text,
       lang: '',
       rate: 1,
+      volume: 1,
+      voice: null,
       onend: null as (() => void) | null,
       onerror: null as (() => void) | null,
     })))
@@ -158,6 +168,39 @@ describe('SessionPlayer', () => {
 
     await vi.waitFor(() => {
       expect(globalThis.speechSynthesis.speak).toHaveBeenCalled()
+    })
+  })
+
+  it('warms up browser TTS immediately on repeat before the coach cue request resolves', async () => {
+    const user = userEvent.setup()
+    let resolveFetch: ((value: unknown) => void) | undefined
+    mockFetch.mockImplementation(() => new Promise(resolve => {
+      resolveFetch = resolve
+    }))
+
+    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+
+    await user.click(await screen.findByRole('button', { name: /nochmal/i }))
+
+    await vi.waitFor(() => {
+      expect(mockSpeak).toHaveBeenCalledTimes(1)
+    })
+
+    expect(globalThis.SpeechSynthesisUtterance).toHaveBeenNthCalledWith(1, '.')
+
+    await act(async () => {
+      resolveFetch?.({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          reply: 'Keep your shoulders soft and move with control.',
+          llmLatencyMs: 42,
+        }),
+      })
+    })
+
+    await vi.waitFor(() => {
+      expect(mockSpeak).toHaveBeenCalledTimes(2)
     })
   })
 
