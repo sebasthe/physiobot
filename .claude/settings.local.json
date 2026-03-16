@@ -10,8 +10,7 @@
       "Bash(git:*)",
       "Bash(cat:*)",
       "Bash(lsof:*)",
-      "Bash(npx playwright:*)",
-      "WebSearch"
+      "Bash(npx playwright:*)"
     ]
   }
 }
