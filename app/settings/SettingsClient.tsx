@@ -1,10 +1,11 @@
 'use client'
 import { useState } from 'react'
-import { Calendar, Mail, ShieldPlus, User } from 'lucide-react'
+import { AlertTriangle, Calendar, Download, Eye, Mail, ShieldPlus, Trash2, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useSoftNavigation } from '@/lib/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Schedule } from '@/lib/types'
+import type { Language, PrivacyConsent, Schedule } from '@/lib/types'
+import { saveUserLanguagePreference } from '@/lib/user-personality'
 
 interface PhysioInfo {
   id: string
@@ -17,8 +18,18 @@ interface Props {
   initialEmail: string
   initialName: string
   initialSchedule: Schedule | null
+  initialLanguage: Language
+  initialPrivacyConsent: PrivacyConsent
   physioInfo: PhysioInfo | null
   isSelfCreatedPlan: boolean
+}
+
+interface MemoryItem {
+  id: string
+  content: string
+  dataClass: 'A' | 'B' | 'C' | 'D'
+  category?: string | null
+  createdAt?: string | null
 }
 
 const WEEK_DAYS = [
@@ -41,6 +52,8 @@ export default function SettingsClient({
   initialEmail,
   initialName,
   initialSchedule,
+  initialLanguage,
+  initialPrivacyConsent,
   physioInfo,
   isSelfCreatedPlan,
 }: Props) {
@@ -56,15 +69,26 @@ export default function SettingsClient({
   const [email, setEmail] = useState(initialEmail)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [language, setLanguage] = useState<Language>(initialLanguage)
+  const [privacyConsent, setPrivacyConsent] = useState<PrivacyConsent>(initialPrivacyConsent)
+  const [memories, setMemories] = useState<MemoryItem[]>([])
+  const [showMemories, setShowMemories] = useState(false)
 
   const [scheduleMessage, setScheduleMessage] = useState<string>()
+  const [languageMessage, setLanguageMessage] = useState<string>()
   const [profileMessage, setProfileMessage] = useState<string>()
   const [emailMessage, setEmailMessage] = useState<string>()
   const [passwordMessage, setPasswordMessage] = useState<string>()
+  const [privacyMessage, setPrivacyMessage] = useState<string>()
+  const [memoryMessage, setMemoryMessage] = useState<string>()
   const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [languageLoading, setLanguageLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [privacyLoading, setPrivacyLoading] = useState(false)
+  const [memoryLoading, setMemoryLoading] = useState(false)
+  const [accountDeletionLoading, setAccountDeletionLoading] = useState(false)
 
   const toggleDay = (day: number) => {
     setSelectedDays(prev => {
@@ -100,6 +124,23 @@ export default function SettingsClient({
       setScheduleMessage('Rhythmus gespeichert.')
     }
     setScheduleLoading(false)
+  }
+
+  const saveLanguage = async (newLanguage: Language) => {
+    const previousLanguage = language
+    setLanguage(newLanguage)
+    setLanguageLoading(true)
+    setLanguageMessage(undefined)
+
+    const { error } = await saveUserLanguagePreference(supabase, userId, newLanguage)
+
+    if (error) {
+      setLanguage(previousLanguage)
+      setLanguageMessage('Sprache konnte nicht gespeichert werden.')
+    } else {
+      setLanguageMessage(newLanguage === 'de' ? 'Sprache gespeichert.' : 'Language saved.')
+    }
+    setLanguageLoading(false)
   }
 
   const saveName = async () => {
@@ -156,6 +197,108 @@ export default function SettingsClient({
     setPasswordLoading(false)
   }
 
+  const savePrivacyConsent = async (nextConsent: PrivacyConsent) => {
+    setPrivacyConsent(nextConsent)
+    setPrivacyLoading(true)
+    setPrivacyMessage(undefined)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ privacy_consent: nextConsent })
+      .eq('id', userId)
+
+    if (error) {
+      setPrivacyConsent(privacyConsent)
+      setPrivacyMessage('Datenschutz-Einstellung konnte nicht gespeichert werden.')
+    } else {
+      setPrivacyMessage('Datenschutz-Einstellung gespeichert.')
+    }
+
+    setPrivacyLoading(false)
+  }
+
+  const loadMemories = async () => {
+    setMemoryLoading(true)
+    setMemoryMessage(undefined)
+
+    try {
+      const response = await fetch('/api/privacy/memories', {
+        credentials: 'include',
+      })
+      const payload = await response.json().catch(() => ({})) as { memories?: MemoryItem[]; error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Erinnerungen konnten nicht geladen werden.')
+      }
+
+      setMemories(payload.memories ?? [])
+      setShowMemories(true)
+      if ((payload.memories ?? []).length === 0) {
+        setMemoryMessage('Keine gespeicherten Erinnerungen gefunden.')
+      }
+    } catch (error) {
+      setMemoryMessage(error instanceof Error ? error.message : 'Erinnerungen konnten nicht geladen werden.')
+    } finally {
+      setMemoryLoading(false)
+    }
+  }
+
+  const clearMemories = async () => {
+    if (typeof window !== 'undefined' && !window.confirm('Alle gespeicherten Erinnerungen wirklich loeschen?')) {
+      return
+    }
+
+    setMemoryLoading(true)
+    setMemoryMessage(undefined)
+
+    try {
+      const response = await fetch('/api/privacy/memories', {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Erinnerungen konnten nicht geloescht werden.')
+      }
+
+      setMemories([])
+      setShowMemories(true)
+      setMemoryMessage('Erinnerungen geloescht.')
+    } catch (error) {
+      setMemoryMessage(error instanceof Error ? error.message : 'Erinnerungen konnten nicht geloescht werden.')
+    } finally {
+      setMemoryLoading(false)
+    }
+  }
+
+  const deleteAccountData = async () => {
+    if (
+      typeof window !== 'undefined'
+      && !window.confirm('Konto und gespeicherte Daten jetzt loeschen? Dieser Schritt ist nicht rueckgaengig.')
+    ) {
+      return
+    }
+
+    setAccountDeletionLoading(true)
+    setPrivacyMessage(undefined)
+
+    try {
+      const response = await fetch('/api/privacy/delete', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Kontodaten konnten nicht geloescht werden.')
+      }
+
+      router.push('/auth/login')
+    } catch (error) {
+      setPrivacyMessage(error instanceof Error ? error.message : 'Kontodaten konnten nicht geloescht werden.')
+    } finally {
+      setAccountDeletionLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-8 md:grid md:grid-cols-2 md:gap-8 md:space-y-0">
       <section className="glass-card rounded-[28px] border-white/5 md:self-start">
@@ -203,6 +346,44 @@ export default function SettingsClient({
             {scheduleLoading ? 'Speichern...' : 'Rhythmus speichern'}
           </button>
           {scheduleMessage && <p className="mt-3 text-xs text-white/40">{scheduleMessage}</p>}
+        </div>
+      </section>
+
+      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
+        <div className="p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">Coach-Sprache</h2>
+        </div>
+        <div className="px-6 pb-6 pt-0">
+          <p className="mb-4 text-xs text-white/40">
+            {language === 'de'
+              ? 'In welcher Sprache soll dein Coach mit dir sprechen?'
+              : 'Which language should your coach use?'}
+          </p>
+          <div className="flex gap-3">
+            {([
+              { value: 'de' as Language, label: 'Deutsch', flag: '🇩🇪' },
+              { value: 'en' as Language, label: 'English', flag: '🇬🇧' },
+            ]).map(({ value, label, flag }) => {
+              const active = language === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={languageLoading}
+                  onClick={() => saveLanguage(value)}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-4 text-sm font-semibold transition-all disabled:opacity-60 ${
+                    active
+                      ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)] text-[var(--accent)]'
+                      : 'border-white/10 text-white/40 hover:border-white/20 hover:text-white/60'
+                  }`}
+                >
+                  <span>{flag}</span>
+                  <span>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+          {languageMessage && <p className="mt-3 text-xs text-white/40">{languageMessage}</p>}
         </div>
       </section>
 
@@ -302,6 +483,107 @@ export default function SettingsClient({
         </div>
       </section>
 
+      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
+        <div className="p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">Datenschutz</h2>
+        </div>
+        <div className="space-y-5 px-6 pb-6 pt-0">
+          <div className="space-y-3">
+            <p className="text-xs text-white/40">
+              Lege fest, wie viel persoenlichen Kontext PhysioBot zwischen Sessions behalten darf.
+            </p>
+            <div className="grid gap-3">
+              {[
+                { value: 'full' as PrivacyConsent, label: 'Voll', hint: 'Coach- und Gesundheitskontext bleibt verfuegbar.' },
+                { value: 'minimal' as PrivacyConsent, label: 'Minimal', hint: 'Nur betriebliche Telemetrie bleibt erhalten.' },
+                { value: 'none' as PrivacyConsent, label: 'Keine Speicherung', hint: 'Keine neuen persoenlichen Erinnerungen speichern.' },
+              ].map(option => {
+                const active = privacyConsent === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={privacyLoading}
+                    onClick={() => savePrivacyConsent(option.value)}
+                    className={`rounded-2xl border px-4 py-4 text-left transition-all disabled:opacity-60 ${
+                      active
+                        ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)]'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-white">{option.label}</div>
+                    <div className="mt-1 text-xs text-white/45">{option.hint}</div>
+                  </button>
+                )
+              })}
+            </div>
+            {privacyMessage && <p className="text-xs text-white/40">{privacyMessage}</p>}
+          </div>
+
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={loadMemories}
+                disabled={memoryLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8 disabled:opacity-60"
+              >
+                <Eye size={16} />
+                {memoryLoading ? 'Laden...' : 'Erinnerungen ansehen'}
+              </button>
+              <button
+                type="button"
+                onClick={clearMemories}
+                disabled={memoryLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8 disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+                Erinnerungen loeschen
+              </button>
+              <a
+                href="/api/privacy/export"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8"
+              >
+                <Download size={16} />
+                Daten exportieren
+              </a>
+              <button
+                type="button"
+                onClick={deleteAccountData}
+                disabled={accountDeletionLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(231,111,81,0.45)] bg-[rgba(231,111,81,0.12)] py-4 text-sm font-semibold text-[rgb(255,194,178)] transition-colors hover:bg-[rgba(231,111,81,0.18)] disabled:opacity-60"
+              >
+                <AlertTriangle size={16} />
+                {accountDeletionLoading ? 'Loeschen...' : 'Konto loeschen'}
+              </button>
+            </div>
+            {memoryMessage && <p className="text-xs text-white/40">{memoryMessage}</p>}
+            {showMemories && (
+              <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                {memories.length === 0 ? (
+                  <p className="text-sm text-white/45">Keine Erinnerungen verfuegbar.</p>
+                ) : (
+                  memories.map(memory => (
+                    <div key={memory.id} className="rounded-xl border border-white/10 bg-[rgba(0,0,0,0.18)] p-4">
+                      <div className="mb-2 flex items-center justify-between gap-4">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getDataClassBadgeClasses(memory.dataClass)}`}>
+                          Klasse {memory.dataClass}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">
+                          {memory.createdAt ? new Date(memory.createdAt).toLocaleDateString() : 'Ohne Datum'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-white/80">{memory.content}</p>
+                      {memory.category && <p className="mt-2 text-[10px] uppercase tracking-[0.16em] text-white/35">{memory.category}</p>}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
       <section className="glass-card rounded-[28px] border-white/5 p-6 md:self-start">
         <h2 className="mb-2 font-display text-xl uppercase tracking-tight text-white">Physiotherapie</h2>
         {physioInfo ? (
@@ -320,4 +602,11 @@ export default function SettingsClient({
       </section>
     </div>
   )
+}
+
+function getDataClassBadgeClasses(dataClass: MemoryItem['dataClass']) {
+  if (dataClass === 'A') return 'bg-[rgba(38,70,83,0.35)] text-[rgb(155,213,231)]'
+  if (dataClass === 'B') return 'bg-[rgba(42,157,138,0.18)] text-[rgb(127,239,214)]'
+  if (dataClass === 'C') return 'bg-[rgba(244,162,97,0.16)] text-[rgb(255,212,162)]'
+  return 'bg-[rgba(231,111,81,0.16)] text-[rgb(255,194,178)]'
 }

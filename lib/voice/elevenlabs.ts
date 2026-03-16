@@ -1,126 +1,89 @@
-import type { VoiceProvider } from './types'
+interface ElevenLabsErrorRecord {
+  message?: unknown
+  error?: unknown
+  code?: unknown
+  type?: unknown
+  detail?: unknown
+}
 
-export class ElevenLabsProvider implements VoiceProvider {
-  private currentAudio: HTMLAudioElement | null = null
-  private currentObjectUrl: string | null = null
+export interface ElevenLabsErrorDetails {
+  provider: 'elevenlabs'
+  status: number
+  message: string
+  code?: string
+  type?: string
+  requestId?: string
+}
 
-  async speak(text: string): Promise<void> {
-    this.stop()
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
+}
 
-    if (text.length <= 1200) {
-      try {
-        await this.playStream(text)
-        return
-      } catch (err) {
-        console.warn('ElevenLabs streaming playback failed, falling back to buffered mode:', err)
-      }
-    }
+function readString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
 
-    const response = await fetch('/api/voice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    })
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
 
-    if (!response.ok) {
-      const { BrowserTTSProvider } = await import('./browser-tts')
-      return new BrowserTTSProvider().speak(text)
-    }
+function resolveErrorRecord(payload: unknown): ElevenLabsErrorRecord | null {
+  const record = asRecord(payload)
+  if (!record) return null
 
-    try {
-      const audioBuffer = await response.arrayBuffer()
-      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' })
-      const objectUrl = URL.createObjectURL(blob)
-      const audio = new Audio(objectUrl)
-      this.currentAudio = audio
-      this.currentObjectUrl = objectUrl
-      audio.preload = 'auto'
-
-      return new Promise((resolve) => {
-        let resolved = false
-        let emittedStart = false
-        const done = () => {
-          if (resolved) return
-          resolved = true
-          if (this.currentObjectUrl) {
-            URL.revokeObjectURL(this.currentObjectUrl)
-            this.currentObjectUrl = null
-          }
-          this.currentAudio = null
-          resolve()
-        }
-
-        audio.onended = done
-        audio.onerror = done
-        audio.onplaying = () => {
-          if (emittedStart) return
-          emittedStart = true
-          emitVoiceAudioStarted()
-        }
-
-        void audio.play().catch(async (err) => {
-          console.warn('ElevenLabs HTMLAudio play failed, falling back to browser TTS:', err)
-          done()
-          const { BrowserTTSProvider } = await import('./browser-tts')
-          await new BrowserTTSProvider().speak(text)
-        })
-      })
-    } catch (err) {
-      console.warn('ElevenLabs audio decode/play error, falling back to browser TTS:', err)
-      const { BrowserTTSProvider } = await import('./browser-tts')
-      return new BrowserTTSProvider().speak(text)
-    }
+  const detail = asRecord(record.detail)
+  if (detail) {
+    return detail as ElevenLabsErrorRecord
   }
 
-  private playStream(text: string): Promise<void> {
-    const streamUrl = `/api/voice/stream?text=${encodeURIComponent(text)}&ts=${Date.now()}`
-    const audio = new Audio(streamUrl)
-    this.currentAudio = audio
-    audio.preload = 'auto'
+  return record as ElevenLabsErrorRecord
+}
 
-    return new Promise((resolve, reject) => {
-      let resolved = false
-      let emittedStart = false
-      const done = () => {
-        if (resolved) return
-        resolved = true
-        this.currentAudio = null
-        resolve()
-      }
-      const fail = (err?: unknown) => {
-        if (resolved) return
-        resolved = true
-        this.currentAudio = null
-        reject(err)
-      }
+export async function readElevenLabsError(
+  response: Response,
+  fallbackMessage: string,
+): Promise<ElevenLabsErrorDetails> {
+  let payload: unknown = null
+  let rawText = ''
+  const contentType = response.headers.get('content-type') ?? ''
 
-      audio.onplaying = () => {
-        if (emittedStart) return
-        emittedStart = true
-        emitVoiceAudioStarted()
-      }
-      audio.onended = done
-      audio.onerror = () => fail(new Error('stream play failed'))
-      void audio.play().catch(fail)
-    })
+  try {
+    if (contentType.includes('application/json')) {
+      payload = await response.json()
+    } else {
+      rawText = (await response.text()).trim()
+    }
+  } catch {
+    rawText = rawText.trim()
   }
 
-  stop(): void {
-    if (this.currentAudio) {
-      this.currentAudio.pause()
-      this.currentAudio.currentTime = 0
-      this.currentAudio.src = ''
-      this.currentAudio = null
-    }
-    if (this.currentObjectUrl) {
-      URL.revokeObjectURL(this.currentObjectUrl)
-      this.currentObjectUrl = null
-    }
+  if (!rawText && typeof payload === 'string') {
+    rawText = payload.trim()
+  }
+
+  const payloadRecord = asRecord(payload)
+  const errorRecord = resolveErrorRecord(payload)
+  const message = readString(errorRecord?.message)
+    ?? readString(payloadRecord?.error)
+    ?? rawText
+    ?? fallbackMessage
+
+  return {
+    provider: 'elevenlabs',
+    status: response.status,
+    message,
+    code: readString(errorRecord?.code),
+    type: readString(errorRecord?.type),
+    requestId: response.headers.get('x-trace-id') ?? undefined,
   }
 }
 
-function emitVoiceAudioStarted() {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('voice-audio-start'))
+export function toElevenLabsErrorPayload(error: ElevenLabsErrorDetails): Record<string, unknown> {
+  return {
+    error: error.message,
+    provider: error.provider,
+    providerStatus: error.status,
+    providerCode: error.code,
+    providerType: error.type,
+    requestId: error.requestId,
   }
 }
