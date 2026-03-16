@@ -21,7 +21,7 @@ import type { TranscriptMessage } from '@/lib/mem0'
 
 const PHASE_LABELS: Record<Exercise['phase'], string> = {
   warmup: 'Warm-up',
-  main: 'Main',
+  main: 'Hauptteil',
   cooldown: 'Cool-down',
 }
 
@@ -271,14 +271,14 @@ function FeedbackForm() {
                   style={{ animationDelay: `${index * 60}ms`, animationFillMode: 'both' }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <div className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/28">
-                        {index + 1}
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                      <div className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/18">
+                        {String(index + 1).padStart(2, '0')}
                       </div>
                       <h2 className="min-w-0 truncate font-display text-[1.15rem] uppercase leading-none tracking-[0.01em] text-white">
                         {exercise.name}
                       </h2>
-                      <div className="shrink-0 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-white/34">
+                      <div className="hidden shrink-0 text-[9px] uppercase tracking-[0.18em] text-white/22 sm:block">
                         {PHASE_LABELS[exercise.phase]}
                       </div>
                     </div>
