@@ -12,13 +12,17 @@
 
 # testing
 /coverage
+/artifacts/voice-debug/
 
 # next.js
 /.next/
+/.next-kokoro/
 /out/
 
 # production
 /build
+/site
+/.venv-docs
 
 # misc
 .DS_Store
