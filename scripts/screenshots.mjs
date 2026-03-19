@@ -16,7 +16,7 @@ async function loadEnv() {
 }
 
 const BASE_URL = 'http://localhost:3000';
-const OUT_DIR = 'screenshots';
+const OUT_DIR = 'artifacts/screenshots';
 const AUTH_STATE = '/tmp/physiobot-auth-state.json';
 
 const dotenv = await loadEnv();

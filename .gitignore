@@ -12,7 +12,10 @@
 
 # testing
 /coverage
-/artifacts/voice-debug/
+/artifacts/
+/screenshots/
+/AGENTS.md
+/CLAUDE.md
 
 # next.js
 /.next/

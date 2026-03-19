@@ -141,46 +141,6 @@ Installable as a home screen app on iOS (Safari → Add to Home Screen) and Andr
 
 ---
 
-## Screenshots
-
-### Dashboard
-
-| Desktop | Mobile |
-|---------|--------|
-| ![Dashboard Desktop](screenshots/01-dashboard-desktop.png) | ![Dashboard Mobile](screenshots/01-dashboard-mobile.png) |
-
-### Plan Detail
-
-| Desktop | Mobile |
-|---------|--------|
-| ![Plan Desktop](screenshots/03-plan-desktop.png) | ![Plan Mobile](screenshots/03-plan-mobile.png) |
-
-### Training Session
-
-| Desktop | Mobile |
-|---------|--------|
-| ![Session Desktop](screenshots/07-training-session-desktop.png) | ![Session Mobile](screenshots/07-training-session-mobile.png) |
-
-### Post-Session Feedback
-
-| Desktop | Mobile |
-|---------|--------|
-| ![Feedback Desktop](screenshots/08-training-feedback-desktop.png) | ![Feedback Mobile](screenshots/08-training-feedback-mobile.png) |
-
-### Onboarding
-
-| Personality | Health Profile |
-|-------------|----------------|
-| ![Personality Desktop](screenshots/06-onboarding-personality-desktop.png) | ![Health Desktop](screenshots/05-onboarding-health-desktop.png) |
-
-### Settings
-
-| Desktop | Mobile |
-|---------|--------|
-| ![Settings Desktop](screenshots/04-settings-desktop.png) | ![Settings Mobile](screenshots/04-settings-mobile.png) |
-
----
-
 ## Tech Stack
 
 | Layer | Technology |
