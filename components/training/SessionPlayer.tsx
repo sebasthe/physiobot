@@ -382,8 +382,34 @@ function toTTSFallbackHint(error: unknown, language: Language): string {
     : 'ElevenLabs-Audio ist nicht verfuegbar. Wechsel auf Browser-Stimme.'
 }
 
+function isProbablyEnglishText(text: string): boolean {
+  const normalized = text.trim().toLowerCase()
+  if (!normalized) return false
+
+  if (/[äöüß]/i.test(normalized)) return false
+
+  const germanMarkers = /\b(und|dein|deine|deinen|mit|jetzt|fuer|übung|uebung|mobilisiere|rücken|ruecken|schulter|schmerzen|bewege|halte|atme|langsam|gleichmaessig|aufwärmen|aufwaermen|hauptteil)\b/i
+  if (germanMarkers.test(normalized)) return false
+
+  const englishMarkers = /\b(the|and|your|with|move|keep|breathing|shoulders|hips|core|back|exercise|stretch|hold|slowly|gently|begin|start|steady)\b/i
+  return englishMarkers.test(normalized)
+}
+
 function resolveCueFallback(exercise: Exercise, language: Language): string {
   const storedScript = exercise.voice_script.trim()
+  if (language === 'en') {
+    if (isProbablyEnglishText(storedScript)) {
+      return storedScript
+    }
+
+    const description = exercise.description.trim()
+    if (isProbablyEnglishText(description)) {
+      return `${exercise.name}. ${description}`
+    }
+
+    return "Let's begin this exercise. Move with control and steady breathing."
+  }
+
   if (storedScript) {
     return storedScript
   }
@@ -393,9 +419,7 @@ function resolveCueFallback(exercise: Exercise, language: Language): string {
     return `${exercise.name}. ${description}`
   }
 
-  return language === 'en'
-    ? "Let's begin this exercise. Move with control and steady breathing."
-    : exercise.name.trim()
+  return exercise.name.trim()
 }
 
 function buildAdaptiveCuePrompt(params: {

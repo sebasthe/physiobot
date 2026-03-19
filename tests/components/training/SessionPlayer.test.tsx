@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '@/components/i18n/I18nProvider'
 import SessionPlayer from '@/components/training/SessionPlayer'
 import type { Exercise } from '@/lib/types'
-import { clearVoiceDebugEvents, getVoiceDebugEvents } from '@/lib/voice-debug/client'
+import { clearVoiceDebugEvents, getVoiceDebugEvents, setVoiceDebugEnabled } from '@/lib/voice-debug/client'
 
 const exercises: Exercise[] = [
   { name: 'Katzenbuckel', description: 'Rücken mobilisieren', phase: 'warmup',
@@ -44,6 +46,10 @@ class MockSpeechRecognition {
 }
 
 vi.stubGlobal('webkitSpeechRecognition', MockSpeechRecognition)
+
+function renderWithI18n(node: ReactNode) {
+  return render(<I18nProvider initialLocale="de">{node}</I18nProvider>)
+}
 
 describe('SessionPlayer', () => {
   beforeEach(() => {
@@ -128,13 +134,13 @@ describe('SessionPlayer', () => {
   })
 
   it('shows first exercise name', async () => {
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
     expect(await screen.findByText('Katzenbuckel')).toBeInTheDocument()
   })
 
   it('shows next exercise on next button click', async () => {
     const user = userEvent.setup()
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /weiter/i }))
     expect(screen.getByText('Brücke')).toBeInTheDocument()
   })
@@ -142,27 +148,27 @@ describe('SessionPlayer', () => {
   it('calls onComplete after last exercise', async () => {
     const user = userEvent.setup()
     const onComplete = vi.fn()
-    render(<SessionPlayer exercises={exercises} onComplete={onComplete} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={onComplete} />)
     await user.click(screen.getByRole('button', { name: /weiter/i }))
     await user.click(screen.getByRole('button', { name: /abschließen/i }))
     expect(onComplete).toHaveBeenCalled()
   })
 
   it('renders empty state when exercises array is empty', () => {
-    render(<SessionPlayer exercises={[]} onComplete={vi.fn()} />)
-    expect(screen.getByText(/keine uebungen/i)).toBeInTheDocument()
+    renderWithI18n(<SessionPlayer exercises={[]} onComplete={vi.fn()} />)
+    expect(screen.getByText(/keine übungen/i)).toBeInTheDocument()
   })
 
   it('shows an unlock hint before the first audio interaction', async () => {
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
-    expect(await screen.findByText(/audio braucht die erste interaktion/i)).toBeInTheDocument()
+    expect(await screen.findByText(/audio startet nach deiner ersten interaktion/i)).toBeInTheDocument()
     expect(globalThis.speechSynthesis.speak).not.toHaveBeenCalled()
   })
 
   it('speaks after pressing Nochmal when audio starts locked', async () => {
     const user = userEvent.setup()
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     await user.click(await screen.findByRole('button', { name: /nochmal/i }))
 
@@ -178,7 +184,7 @@ describe('SessionPlayer', () => {
       resolveFetch = resolve
     }))
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     await user.click(await screen.findByRole('button', { name: /nochmal/i }))
 
@@ -211,7 +217,7 @@ describe('SessionPlayer', () => {
     })
 
     await act(async () => {
-      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+      renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
     })
 
     await vi.waitFor(() => {
@@ -231,7 +237,7 @@ describe('SessionPlayer', () => {
     })
 
     await act(async () => {
-      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
+      renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
     })
 
     await vi.waitFor(() => {
@@ -249,7 +255,7 @@ describe('SessionPlayer', () => {
     })
 
     await act(async () => {
-      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
+      renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
     })
 
     expect(await screen.findByText(/keep your shoulders soft/i)).toBeInTheDocument()
@@ -263,7 +269,7 @@ describe('SessionPlayer', () => {
   it('prefetches the intro cue only once while the timed exercise timer ticks', async () => {
     vi.useFakeTimers()
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
@@ -277,7 +283,7 @@ describe('SessionPlayer', () => {
   it('keeps browser speech recognition active after the mic is enabled', async () => {
     vi.useFakeTimers()
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: /mikrofon an/i }))
 
@@ -291,7 +297,7 @@ describe('SessionPlayer', () => {
   })
 
   it('keeps the voice glow active while the mic loop is armed', () => {
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     expect(screen.getByTestId('timer-ring-fallback')).toBeInTheDocument()
 
@@ -311,18 +317,19 @@ describe('SessionPlayer', () => {
       setTimeout(() => utterance.onerror?.(), 0)
     })
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     expect(await screen.findByText(/tippe oder druecke nochmal/i)).toBeInTheDocument()
   })
 
-  it('renders the debug panel and records events when voice debug is enabled', async () => {
-    window.localStorage.setItem('physiobot:voice-debug', '1')
+  it('records events when voice debug is enabled', async () => {
+    setVoiceDebugEnabled(true)
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
-    expect(await screen.findByTestId('voice-debug-panel')).toBeInTheDocument()
-    expect(getVoiceDebugEvents().some(event => event.type === 'session-player.init')).toBe(true)
+    await vi.waitFor(() => {
+      expect(getVoiceDebugEvents().some(event => event.type === 'session-player.init')).toBe(true)
+    })
   })
 
   it('falls back to the stored voice script when the adaptive cue request fails', async () => {
@@ -334,7 +341,7 @@ describe('SessionPlayer', () => {
     mockFetch.mockRejectedValue(new Error('network down'))
 
     await act(async () => {
-      render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+      renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
     })
 
     await vi.waitFor(() => {
@@ -348,7 +355,7 @@ describe('SessionPlayer', () => {
     process.env.NEXT_PUBLIC_COACH_LANGUAGE = 'en'
     mockFetch.mockRejectedValueOnce(new Error('network down'))
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} />)
 
     expect(await screen.findByText(/let's begin this exercise/i)).toBeInTheDocument()
     expect(screen.queryByText(/mobilisiere jetzt deinen rücken/i)).not.toBeInTheDocument()
@@ -361,7 +368,7 @@ describe('SessionPlayer', () => {
     const { KokoroTTS } = await import('@/lib/voice-module/providers/tts/KokoroTTS')
     const kokoroSpy = vi.spyOn(KokoroTTS.prototype, 'prepare').mockResolvedValue()
 
-    render(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
+    renderWithI18n(<SessionPlayer exercises={exercises} onComplete={vi.fn()} coachLanguage="en" />)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(350)

@@ -15,6 +15,8 @@ export function getPhysioConsentMessage(language: Language): string {
   return CONSENT_MESSAGES[language]
 }
 
+export const PHYSIO_CONSENT_MESSAGE = CONSENT_MESSAGES.de
+
 export function requiresPhysioConsent(plan: { contraindications?: string[] | null }): boolean {
   return (plan.contraindications?.length ?? 0) > 0
 }
