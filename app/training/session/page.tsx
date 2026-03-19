@@ -1,13 +1,17 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useI18n } from '@/components/i18n/I18nProvider'
 import { createClient } from '@/lib/supabase/client'
 import SessionPlayer from '@/components/training/SessionPlayer'
-import { PHYSIO_CONSENT_MESSAGE, requiresPhysioConsent } from '@/lib/physio/consent'
-import type { Exercise, Language } from '@/lib/types'
+import { localizeExercises } from '@/lib/exercises'
+import { persistLanguageCookie } from '@/lib/i18n/client'
+import { getPhysioConsentMessage, requiresPhysioConsent } from '@/lib/physio/consent'
+import type { Exercise, Language, StoredExercise } from '@/lib/types'
 import type { TranscriptMessage } from '@/lib/mem0'
 
 export default function TrainingSessionPage() {
+  const { locale, messages, setLocale } = useI18n()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [planId, setPlanId] = useState<string>()
   const [sessionId, setSessionId] = useState<string>()
@@ -61,8 +65,13 @@ export default function TrainingSessionPage() {
       .eq('user_id', user.id)
     setSessionNumber((count ?? 0) + 1)
 
-    setCoachLanguage(personality?.language === 'en' ? 'en' : 'de')
-    setExercises(plan.exercises as Exercise[])
+    const resolvedLanguage = personality?.language === 'en' ? 'en' : 'de'
+    setCoachLanguage(resolvedLanguage)
+    if (resolvedLanguage !== locale) {
+      persistLanguageCookie(resolvedLanguage)
+      setLocale(resolvedLanguage)
+    }
+    setExercises(localizeExercises(plan.exercises as StoredExercise[], resolvedLanguage))
 
     const consentStorageKey = `physiobot:physio-consent:${resolvedPlanId}`
     const hasConsent = typeof window !== 'undefined'
@@ -139,7 +148,7 @@ export default function TrainingSessionPage() {
           className="text-phase animate-pulse"
           style={{ color: 'var(--primary)', letterSpacing: '0.2em' }}
         >
-          TRAINING WIRD GELADEN
+          {messages.session.loading.toUpperCase()}
         </div>
       </main>
     )
@@ -152,23 +161,23 @@ export default function TrainingSessionPage() {
         style={{ background: 'var(--background)' }}
       >
         <div className="mx-auto max-w-xl rounded-[28px] border border-white/10 bg-[rgba(15,23,42,0.72)] p-8 text-white shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-          <div className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent)]">Physio-Zustimmung</div>
-          <h1 className="font-display text-4xl uppercase tracking-tight">Gesundheitsdaten</h1>
-          <p className="mt-4 text-sm leading-6 text-white/70">{PHYSIO_CONSENT_MESSAGE}</p>
+          <div className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent)]">{messages.session.consentEyebrow}</div>
+          <h1 className="font-display text-4xl uppercase tracking-tight">{messages.session.consentTitle}</h1>
+          <p className="mt-4 text-sm leading-6 text-white/70">{getPhysioConsentMessage(locale)}</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               onClick={() => void acceptPhysioConsent()}
               className="flex-1 rounded-2xl bg-[var(--secondary)] px-5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10"
             >
-              Zustimmen und starten
+              {messages.session.consentAccept}
             </button>
             <button
               type="button"
               onClick={() => router.push('/dashboard')}
               className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm font-semibold text-white/75 transition-colors hover:bg-white/10"
             >
-              Abbrechen
+              {messages.session.consentCancel}
             </button>
           </div>
         </div>

@@ -1,4 +1,7 @@
 import { redirect } from 'next/navigation'
+import { getMessages } from '@/lib/i18n/messages'
+import { getRequestLanguage } from '@/lib/i18n/server'
+import { toLocaleTag } from '@/lib/i18n/config'
 import { createClient } from '@/lib/supabase/server'
 
 interface TelemetryEventRow {
@@ -8,6 +11,8 @@ interface TelemetryEventRow {
 }
 
 export default async function VoiceMetricsPage() {
+  const locale = await getRequestLanguage()
+  const messages = getMessages(locale)
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -45,45 +50,45 @@ export default async function VoiceMetricsPage() {
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
       <div className="mb-8">
         <p className="text-sm uppercase tracking-[0.35em]" style={{ color: 'var(--primary)' }}>
-          Admin
+          {messages.admin.eyebrow}
         </p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight">Voice Metrics</h1>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight">{messages.admin.title}</h1>
         <p className="mt-3 max-w-2xl text-sm text-white/70">
-          Aggregated telemetry for the last 7 days. Turn-time metrics ignore skipped turns with no audible response.
+          {messages.admin.copy}
         </p>
       </div>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Total Events" value={events.length} />
-        <MetricCard label="Turn Metrics" value={turnMetricEvents.length} />
-        <MetricCard label="Avg Turn Time" value={`${avgTurnTime}ms`} />
-        <MetricCard label="P95 Turn Time" value={`${p95TurnTime}ms`} />
-        <MetricCard label="Interrupt Rate" value={interruptRate} />
-        <MetricCard label="Fallback Rate" value={fallbackRate} />
-        <MetricCard label="Error Rate" value={errorRate} />
-        <MetricCard label="LLM Timeouts" value={timedOutTurns} />
-        <MetricCard label="Direct Commands" value={directCommands} />
+        <MetricCard label={messages.admin.totalEvents} value={events.length} />
+        <MetricCard label={messages.admin.turnMetrics} value={turnMetricEvents.length} />
+        <MetricCard label={messages.admin.avgTurnTime} value={`${avgTurnTime}ms`} />
+        <MetricCard label={messages.admin.p95TurnTime} value={`${p95TurnTime}ms`} />
+        <MetricCard label={messages.admin.interruptRate} value={interruptRate} />
+        <MetricCard label={messages.admin.fallbackRate} value={fallbackRate} />
+        <MetricCard label={messages.admin.errorRate} value={errorRate} />
+        <MetricCard label={messages.admin.llmTimeouts} value={timedOutTurns} />
+        <MetricCard label={messages.admin.directCommands} value={directCommands} />
       </section>
 
       <section className="mt-10 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
         <div className="border-b border-white/10 px-5 py-4">
-          <h2 className="text-lg font-medium">Recent Telemetry</h2>
+          <h2 className="text-lg font-medium">{messages.admin.recentTelemetry}</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-white/5 text-white/60">
               <tr>
-                <th className="px-5 py-3 font-medium">Created</th>
-                <th className="px-5 py-3 font-medium">Type</th>
-                <th className="px-5 py-3 font-medium">Summary</th>
+                <th className="px-5 py-3 font-medium">{messages.admin.created}</th>
+                <th className="px-5 py-3 font-medium">{messages.admin.type}</th>
+                <th className="px-5 py-3 font-medium">{messages.admin.summary}</th>
               </tr>
             </thead>
             <tbody>
               {events.slice(0, 25).map(event => (
                 <tr key={`${event.event_type}:${event.created_at}`} className="border-t border-white/10">
-                  <td className="px-5 py-3 text-white/70">{new Date(event.created_at).toLocaleString()}</td>
+                  <td className="px-5 py-3 text-white/70">{new Date(event.created_at).toLocaleString(toLocaleTag(locale))}</td>
                   <td className="px-5 py-3">{event.event_type}</td>
-                  <td className="px-5 py-3 text-white/70">{summarizePayload(event)}</td>
+                  <td className="px-5 py-3 text-white/70">{summarizePayload(event, locale)}</td>
                 </tr>
               ))}
             </tbody>
@@ -103,14 +108,15 @@ function MetricCard({ label, value }: { label: string; value: string | number })
   )
 }
 
-function summarizePayload(event: TelemetryEventRow): string {
+function summarizePayload(event: TelemetryEventRow, locale: 'de' | 'en'): string {
+  const messages = getMessages(locale)
   if (event.event_type === 'turn_metrics') {
     const totalTurnTime = readNumber(event.payload?.totalTurnTime)
     const category = typeof event.payload?.utteranceCategory === 'string' ? event.payload.utteranceCategory : 'unknown'
     const skippedReason = typeof event.payload?.skippedReason === 'string' ? event.payload.skippedReason : null
-    const timedOut = event.payload?.llmTimedOut === true ? 'timeout' : null
+    const timedOut = event.payload?.llmTimedOut === true ? messages.admin.timeout : null
 
-    return [category, skippedReason, timedOut, totalTurnTime !== null ? `${totalTurnTime}ms` : 'no audio']
+    return [category, skippedReason, timedOut, totalTurnTime !== null ? `${totalTurnTime}ms` : messages.admin.noAudio]
       .filter(Boolean)
       .join(' · ')
   }

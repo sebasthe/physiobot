@@ -1,25 +1,12 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import LanguageToggle from '@/components/i18n/LanguageToggle'
+import { useI18n } from '@/components/i18n/I18nProvider'
 import { createClient } from '@/lib/supabase/client'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { FitnessLevel } from '@/lib/types'
-
-const COMPLAINT_OPTIONS = [
-  { label: 'Rücken', emoji: '🔙' },
-  { label: 'Knie', emoji: '🦵' },
-  { label: 'Schulter', emoji: '💪' },
-  { label: 'Haltung', emoji: '🧍' },
-  { label: 'Hüfte', emoji: '🦴' },
-  { label: 'Nacken', emoji: '🦒' },
-]
-
-const FITNESS_LEVELS: { value: FitnessLevel; label: string; description: string; emoji: string }[] = [
-  { value: 'beginner', label: 'Anfänger', description: 'Wenig Erfahrung, sanfter Einstieg', emoji: '🌱' },
-  { value: 'intermediate', label: 'Mittel', description: 'Regelmäßig aktiv, solide Basis', emoji: '⚡' },
-  { value: 'advanced', label: 'Fortgeschritten', description: 'Erfahren, bereit für Herausforderungen', emoji: '🔥' },
-]
 
 export default function HealthProfilePage() {
   const [complaints, setComplaints] = useState<string[]>([])
@@ -28,7 +15,21 @@ export default function HealthProfilePage() {
   const [sessionDuration, setSessionDuration] = useState(20)
   const [sessionsPerWeek, setSessionsPerWeek] = useState(3)
   const [isLoading, setIsLoading] = useState(false)
+  const { messages } = useI18n()
   const router = useRouter()
+  const complaintOptions = [
+    { label: messages.onboarding.health.complaintsOptions.back, emoji: '🔙' },
+    { label: messages.onboarding.health.complaintsOptions.knee, emoji: '🦵' },
+    { label: messages.onboarding.health.complaintsOptions.shoulder, emoji: '💪' },
+    { label: messages.onboarding.health.complaintsOptions.posture, emoji: '🧍' },
+    { label: messages.onboarding.health.complaintsOptions.hip, emoji: '🦴' },
+    { label: messages.onboarding.health.complaintsOptions.neck, emoji: '🦒' },
+  ]
+  const fitnessLevels: { value: FitnessLevel; label: string; description: string; emoji: string }[] = [
+    { value: 'beginner', label: messages.onboarding.health.fitnessOptions.beginner.label, description: messages.onboarding.health.fitnessOptions.beginner.description, emoji: '🌱' },
+    { value: 'intermediate', label: messages.onboarding.health.fitnessOptions.intermediate.label, description: messages.onboarding.health.fitnessOptions.intermediate.description, emoji: '⚡' },
+    { value: 'advanced', label: messages.onboarding.health.fitnessOptions.advanced.label, description: messages.onboarding.health.fitnessOptions.advanced.description, emoji: '🔥' },
+  ]
 
   const toggleComplaint = (label: string) => {
     setComplaints(prev =>
@@ -63,14 +64,18 @@ export default function HealthProfilePage() {
 
   return (
     <main className="vital-gradient mx-auto min-h-screen max-w-xl px-5 pb-10 md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8" style={{ paddingTop: 'max(24px, var(--safe-top))' }}>
+      <div className="mb-6 flex justify-end">
+        <LanguageToggle />
+      </div>
+
       {/* Header */}
       <div className="mb-8 animate-slide-up md:max-w-2xl">
-        <div className="text-phase mb-2" style={{ color: 'var(--primary)', letterSpacing: '0.2em', fontSize: '0.65rem' }}>DEIN PROFIL</div>
+        <div className="text-phase mb-2" style={{ color: 'var(--primary)', letterSpacing: '0.2em', fontSize: '0.65rem' }}>{messages.onboarding.health.eyebrow.toUpperCase()}</div>
         <h1 className="font-display uppercase" style={{ fontSize: 'clamp(2rem, 10vw, 3.5rem)', lineHeight: 0.95, color: 'var(--foreground)' }}>
-          Gesundheits<span style={{ color: 'var(--primary)' }}>profil</span>
+          {messages.onboarding.health.title}
         </h1>
         <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
-          Dein Coach braucht diese Infos um deinen Plan zu erstellen.
+          {messages.onboarding.health.copy}
         </p>
       </div>
 
@@ -78,11 +83,11 @@ export default function HealthProfilePage() {
         {/* Complaints */}
         <div className="md:col-span-2">
           <Label className="text-sm font-semibold mb-3 block" style={{ color: 'var(--foreground)' }}>
-            Wo hast du Beschwerden?
-            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>Mehrfachauswahl möglich</span>
+            {messages.onboarding.health.complaints}
+            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{messages.onboarding.health.multipleChoice}</span>
           </Label>
           <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
-            {COMPLAINT_OPTIONS.map(({ label, emoji }) => {
+            {complaintOptions.map(({ label, emoji }) => {
               const selected = complaints.includes(label)
               return (
                 <button
@@ -104,7 +109,7 @@ export default function HealthProfilePage() {
         {/* Goals */}
         <div className="space-y-2">
           <Label htmlFor="goals" className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-            Was ist dein Ziel?
+            {messages.onboarding.health.goals}
           </Label>
           <Textarea
             id="goals"
@@ -112,7 +117,7 @@ export default function HealthProfilePage() {
             onChange={e => setGoals(e.target.value)}
             required
             rows={3}
-            placeholder="z.B. Rückenschmerzen reduzieren und wieder Sport machen können…"
+            placeholder={messages.onboarding.health.goalsPlaceholder}
             className="resize-none"
           />
         </div>
@@ -120,10 +125,10 @@ export default function HealthProfilePage() {
         {/* Fitness level */}
         <div>
           <Label className="text-sm font-semibold mb-3 block" style={{ color: 'var(--foreground)' }}>
-            Dein Fitnesslevel
+            {messages.onboarding.health.fitnessLevel}
           </Label>
           <div className="space-y-2">
-            {FITNESS_LEVELS.map(({ value, label, description, emoji }) => (
+            {fitnessLevels.map(({ value, label, description, emoji }) => (
               <button
                 key={value}
                 type="button"
@@ -152,7 +157,7 @@ export default function HealthProfilePage() {
         {/* Duration slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Trainingsdauer</Label>
+            <Label className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{messages.onboarding.health.duration}</Label>
             <span className="font-display text-2xl" style={{ color: 'var(--primary)' }}>{sessionDuration}<span className="text-sm ml-1" style={{ color: 'var(--text-secondary)' }}>min</span></span>
           </div>
           <input
@@ -173,7 +178,7 @@ export default function HealthProfilePage() {
         {/* Frequency slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Einheiten pro Woche</Label>
+            <Label className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>{messages.onboarding.health.sessionsPerWeek}</Label>
             <span className="font-display text-2xl" style={{ color: 'var(--primary)' }}>{sessionsPerWeek}<span className="text-sm ml-1" style={{ color: 'var(--text-secondary)' }}>×</span></span>
           </div>
           <input
@@ -197,7 +202,7 @@ export default function HealthProfilePage() {
           disabled={isLoading || !goals.trim()}
           className="btn-primary w-full rounded-xl py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed md:col-span-2"
         >
-          {isLoading ? 'Plan wird erstellt…' : 'Trainingsplan erstellen →'}
+          {isLoading ? messages.onboarding.health.creatingPlan : messages.onboarding.health.createPlan}
         </button>
       </form>
     </main>

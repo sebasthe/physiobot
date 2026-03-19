@@ -1,7 +1,11 @@
 import { redirect } from 'next/navigation'
+import { localizeExercises } from '@/lib/exercises'
+import { formatTemplate } from '@/lib/i18n/format'
+import { getMessages } from '@/lib/i18n/messages'
+import { getRequestLanguage } from '@/lib/i18n/server'
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from './DashboardClient'
-import type { Exercise, MotivationStyle, Schedule, Streak } from '@/lib/types'
+import type { Exercise, Language, MotivationStyle, Schedule, Streak } from '@/lib/types'
 
 interface ActivePlanData {
   id: string
@@ -22,36 +26,39 @@ function getCurrentWeekRange() {
   return { start, end }
 }
 
-function compactGoalText(goal: string | null | undefined) {
-  if (!goal) return 'mehr Beweglichkeit und weniger Beschwerden'
+function compactGoalText(goal: string | null | undefined, fallbackGoal: string) {
+  if (!goal) return fallbackGoal
   const firstSentence = goal.split(/[.!?]/)[0]?.trim() ?? ''
-  if (!firstSentence) return 'mehr Beweglichkeit und weniger Beschwerden'
+  if (!firstSentence) return fallbackGoal
   return firstSentence.length > 110 ? `${firstSentence.slice(0, 107)}...` : firstSentence
 }
 
-function buildPlanSummary(goal: string | null | undefined, motivationStyle: MotivationStyle | null | undefined) {
-  const compactGoal = compactGoalText(goal)
+function buildPlanSummary(goal: string | null | undefined, motivationStyle: MotivationStyle | null | undefined, language: Language) {
+  const messages = getMessages(language)
+  const compactGoal = compactGoalText(goal, messages.dashboard.planSummary.fallbackGoal)
   if (motivationStyle === 'goal_oriented') {
-    return `Ziel heute: ${compactGoal}. Jede Session bringt dich sichtbar näher an dein Ergebnis.`
+    return formatTemplate(messages.dashboard.planSummary.goalOriented, { goal: compactGoal })
   }
   if (motivationStyle === 'pain_avoidance') {
-    return `Ziel heute: ${compactGoal}. Ruhig, kontrolliert und so, dass dein Alltag spürbar leichter wird.`
+    return formatTemplate(messages.dashboard.planSummary.painAvoidance, { goal: compactGoal })
   }
-  return `Ziel heute: ${compactGoal}. Mit ruhigem Fokus, damit du Fortschritt siehst und dich gleichzeitig sicher fühlst.`
+  return formatTemplate(messages.dashboard.planSummary.mixed, { goal: compactGoal })
 }
 
-function buildMotivationSlogan(goal: string | null | undefined, motivationStyle: MotivationStyle | null | undefined) {
-  const compactGoal = compactGoalText(goal)
+function buildMotivationSlogan(goal: string | null | undefined, motivationStyle: MotivationStyle | null | undefined, language: Language) {
+  const messages = getMessages(language)
+  const compactGoal = compactGoalText(goal, messages.dashboard.planSummary.fallbackGoal)
   if (motivationStyle === 'goal_oriented') {
-    return `Du trainierst für dein Ziel: ${compactGoal}. Ein Schritt heute zahlt direkt darauf ein.`
+    return formatTemplate(messages.dashboard.motivation.goalOriented, { goal: compactGoal })
   }
   if (motivationStyle === 'pain_avoidance') {
-    return `Warum heute? Damit ${compactGoal.toLowerCase()} und dein Körper sich wieder verlässlicher anfühlt.`
+    return formatTemplate(messages.dashboard.motivation.painAvoidance, { goal: compactGoal.toLowerCase() })
   }
-  return `Warum heute? Für ${compactGoal.toLowerCase()} und ein Körpergefühl, dem du wieder vertrauen kannst.`
+  return formatTemplate(messages.dashboard.motivation.mixed, { goal: compactGoal.toLowerCase() })
 }
 
 export default async function DashboardPage() {
+  const locale = await getRequestLanguage()
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
@@ -102,7 +109,7 @@ export default async function DashboardPage() {
     if (plan) {
       activePlan = {
         id: plan.id,
-        exercises: (plan.exercises as Exercise[]) ?? [],
+        exercises: localizeExercises(plan.exercises, locale),
         created_at: plan.created_at,
         source: plan.source as 'ai' | 'physio',
       }
@@ -118,8 +125,8 @@ export default async function DashboardPage() {
   )
 
   const motivationStyle = (personality?.motivation_style as MotivationStyle | null | undefined) ?? null
-  const planSummary = buildPlanSummary(healthProfile.goals, motivationStyle)
-  const motivationSlogan = buildMotivationSlogan(healthProfile.goals, motivationStyle)
+  const planSummary = buildPlanSummary(healthProfile.goals, motivationStyle, locale)
+  const motivationSlogan = buildMotivationSlogan(healthProfile.goals, motivationStyle, locale)
 
   return (
     <DashboardClient

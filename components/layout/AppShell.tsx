@@ -2,14 +2,8 @@
 
 import { usePathname } from 'next/navigation'
 import { Calendar, ChevronRight, Flame, Trophy, User } from 'lucide-react'
+import { useI18n } from '@/components/i18n/I18nProvider'
 import TransitionLink from '@/components/navigation/TransitionLink'
-
-const PRIMARY_NAV_ITEMS = [
-  { href: '/dashboard', label: 'Home', icon: Flame },
-  { href: '/plan', label: 'Plan', icon: Calendar },
-  { href: '/badges', label: 'Badges', icon: Trophy },
-  { href: '/settings', label: 'Profil', icon: User },
-]
 
 const HIDE_NAV_PREFIXES = ['/auth', '/onboarding', '/training/session', '/training/feedback']
 const HIDE_NAV_EXACT = ['/']
@@ -20,7 +14,14 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname()
+  const { messages } = useI18n()
   const hideNav = HIDE_NAV_EXACT.includes(pathname) || HIDE_NAV_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  const primaryNavItems = [
+    { href: '/dashboard', label: messages.nav.home, icon: Flame },
+    { href: '/plan', label: messages.nav.plan, icon: Calendar },
+    { href: '/badges', label: messages.nav.badges, icon: Trophy },
+    { href: '/settings', label: messages.nav.profile, icon: User },
+  ]
 
   return (
     <div className={`app-shell ${hideNav ? 'app-shell--navless' : 'app-shell--with-nav'}`}>
@@ -28,15 +29,15 @@ export default function AppShell({ children }: AppShellProps) {
         <aside className="desktop-sidebar">
           <div className="desktop-sidebar__panel">
             <div className="desktop-sidebar__brand">
-              <div className="desktop-sidebar__eyebrow">PhysioCoach</div>
-              <div className="desktop-sidebar__title">Dein Trainingsraum</div>
+              <div className="desktop-sidebar__eyebrow">{messages.common.appName}</div>
+              <div className="desktop-sidebar__title">{messages.nav.desktopTitle}</div>
               <p className="desktop-sidebar__copy">
-                Dashboard, Plan, Badges und Profil bleiben auf Desktop direkt erreichbar.
+                {messages.nav.desktopCopy}
               </p>
             </div>
 
             <nav className="desktop-nav" aria-label="Hauptnavigation">
-              {PRIMARY_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+              {primaryNavItems.map(({ href, label, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(`${href}/`)
                 return (
                   <TransitionLink
@@ -57,9 +58,9 @@ export default function AppShell({ children }: AppShellProps) {
             </nav>
 
             <div className="desktop-sidebar__meta">
-              <div className="desktop-sidebar__section-label">Workspace</div>
+              <div className="desktop-sidebar__section-label">{messages.nav.workspace}</div>
               <p className="desktop-sidebar__meta-copy">
-                Mobile bleibt kompakt. Desktop bekommt mehr Breite, klare Hierarchie und eine feste Navigation.
+                {messages.nav.desktopMeta}
               </p>
             </div>
           </div>
@@ -76,7 +77,7 @@ export default function AppShell({ children }: AppShellProps) {
       {!hideNav && (
         <div className="bottom-nav-shell">
           <nav className="bottom-nav">
-            {PRIMARY_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            {primaryNavItems.map(({ href, label, icon: Icon }) => {
               const isActive = pathname === href || pathname.startsWith(`${href}/`)
               return (
                 <TransitionLink

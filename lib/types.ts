@@ -3,6 +3,7 @@ export type FeedbackStyle = 'direct' | 'gentle' | 'energetic'
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 export type Language = 'de' | 'en'
 export type PrivacyConsent = 'full' | 'minimal' | 'none'
+export type ExercisePhase = 'warmup' | 'main' | 'cooldown'
 
 export interface UserPersonality {
   motivation_style: MotivationStyle
@@ -19,19 +20,32 @@ export interface HealthProfile {
   sessions_per_week: number
 }
 
-export interface Exercise {
+export interface StoredExerciseTranslation {
   name: string
   description: string
+  voice_script: string
+}
+
+export interface StoredExercise {
+  id: string
+  phase: ExercisePhase
   duration_seconds?: number
   repetitions?: number
   sets?: number
-  phase: 'warmup' | 'main' | 'cooldown'
-  voice_script: string
+  translations: Partial<Record<Language, StoredExerciseTranslation>>
+}
+
+export interface Exercise extends StoredExerciseTranslation {
+  id: string
+  phase: ExercisePhase
+  duration_seconds?: number
+  repetitions?: number
+  sets?: number
 }
 
 export interface TrainingPlan {
   id?: string
-  exercises: Exercise[]
+  exercises: StoredExercise[]
   source: 'ai' | 'physio'
   contraindications?: string[]
   therapist_notes?: string | null
@@ -63,12 +77,12 @@ export const XP_PER_PHASE = {
 } as const
 
 export const LEVELS = [
-  { level: 1, min: 0, max: 200, title: 'Bewegungsstarter' },
-  { level: 2, min: 200, max: 400, title: 'Körperbewusst' },
-  { level: 3, min: 400, max: 650, title: 'Ausdauernder' },
-  { level: 4, min: 650, max: 1000, title: 'Bewegungstalent' },
-  { level: 5, min: 1000, max: 1500, title: 'Körpermeister' },
-  { level: 6, min: 1500, max: Infinity, title: 'Physio-Champion' },
+  { level: 1, min: 0, max: 200, titleKey: 'movementStarter' },
+  { level: 2, min: 200, max: 400, titleKey: 'bodyAware' },
+  { level: 3, min: 400, max: 650, titleKey: 'persistent' },
+  { level: 4, min: 650, max: 1000, titleKey: 'movementTalent' },
+  { level: 5, min: 1000, max: 1500, titleKey: 'bodyMaster' },
+  { level: 6, min: 1500, max: Infinity, titleKey: 'physioChampion' },
 ] as const
 
 export function getLevelInfo(xp: number) {
@@ -82,22 +96,30 @@ export interface Streak {
   freeze_days: number
 }
 
+export type BadgeKeyName =
+  | 'first_step'
+  | 'week_hero'
+  | 'neck_pro'
+  | 'body_master'
+  | 'energy_source'
+  | 'morning_person'
+  | 'comeback_kid'
+  | 'month_pro'
+
 export interface BadgeKey {
-  key: string
-  name: string
+  key: BadgeKeyName
   emoji: string
-  description: string
 }
 
 export const ALL_BADGES: BadgeKey[] = [
-  { key: 'first_step', emoji: '🔥', name: 'Erster Schritt', description: 'Erste Session abgeschlossen' },
-  { key: 'week_hero', emoji: '💪', name: '7-Tage-Held', description: '7 Tage Streak' },
-  { key: 'neck_pro', emoji: '🎯', name: 'Nacken-Profi', description: '10× Nacken-Plan' },
-  { key: 'body_master', emoji: '🏆', name: 'Körpermeister', description: 'Level 5 erreicht' },
-  { key: 'energy_source', emoji: '⚡', name: 'Energiequelle', description: '1000 XP gesamt' },
-  { key: 'morning_person', emoji: '🌙', name: 'Morgenmensch', description: '7 Sessions vor 9 Uhr' },
-  { key: 'comeback_kid', emoji: '🔄', name: 'Comeback-Kid', description: 'Nach Pause zurückgekehrt' },
-  { key: 'month_pro', emoji: '💎', name: 'Monats-Profi', description: '30 Tage Streak' },
+  { key: 'first_step', emoji: '🔥' },
+  { key: 'week_hero', emoji: '💪' },
+  { key: 'neck_pro', emoji: '🎯' },
+  { key: 'body_master', emoji: '🏆' },
+  { key: 'energy_source', emoji: '⚡' },
+  { key: 'morning_person', emoji: '🌙' },
+  { key: 'comeback_kid', emoji: '🔄' },
+  { key: 'month_pro', emoji: '💎' },
 ]
 
 export interface Schedule {

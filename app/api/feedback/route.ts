@@ -3,11 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { anthropic } from '@/lib/claude/client'
 import { buildSystemPrompt, buildFeedbackPrompt } from '@/lib/claude/prompts'
 import { extractJson } from '@/lib/claude/extract-json'
+import { localizeExercises, normalizeStoredExercises } from '@/lib/exercises'
 import { addSessionTranscript, extractAndStoreMemories, getRelevantMemories, type TranscriptMessage } from '@/lib/mem0'
 import { updateGamification } from '@/lib/gamification'
 import { extractSessionInsights } from '@/lib/memory/extractor'
 import { resolveConsentLevel } from '@/lib/privacy/types'
-import type { SessionFeedback, UserPersonality, Exercise } from '@/lib/types'
+import type { Exercise, SessionFeedback, TrainingPlan, UserPersonality } from '@/lib/types'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -79,11 +80,14 @@ export async function POST(request: Request) {
     .single()
 
   if (!plan) return NextResponse.json({ ok: true })
+  const typedPersonality = personality as UserPersonality
+  const normalizedExercises = normalizeStoredExercises(plan.exercises, typedPersonality.language)
+  const localizedExercises = localizeExercises(normalizedExercises, typedPersonality.language)
 
   const gamification = await updateGamification(
     supabase,
     user.id,
-    completedExercises.length > 0 ? completedExercises : (plan.exercises as Exercise[]),
+    completedExercises.length > 0 ? completedExercises : localizedExercises,
     sessionId ?? undefined
   ).catch(err => {
     console.error('Gamification update failed:', err)
@@ -100,11 +104,11 @@ export async function POST(request: Request) {
   ).catch(() => [])
 
   const systemPrompt = buildSystemPrompt({
-    personality: personality as UserPersonality,
+    personality: typedPersonality,
     memories: memoryTexts,
   })
 
-  const currentExercisesJson = JSON.stringify({ exercises: plan.exercises })
+  const currentExercisesJson = JSON.stringify({ exercises: normalizedExercises })
   const feedbackPrompt = buildFeedbackPrompt(feedback)
 
   try {
@@ -120,7 +124,8 @@ export async function POST(request: Request) {
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response')
 
-    const updatedPlan = extractJson<{ exercises: Exercise[] }>(content.text)
+    const updatedPlan = extractJson<{ exercises: TrainingPlan['exercises'] }>(content.text)
+    const nextExercises = normalizeStoredExercises(updatedPlan.exercises, typedPersonality.language)
 
     const { data: newPlan } = await supabase
       .from('training_plans')
@@ -128,7 +133,7 @@ export async function POST(request: Request) {
         assigned_to: user.id,
         created_by: user.id,
         source: 'ai',
-        exercises: updatedPlan.exercises,
+        exercises: nextExercises,
       })
       .select()
       .single()

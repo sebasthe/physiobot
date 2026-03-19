@@ -84,9 +84,7 @@ export function buildPlanRequestMessage({
   healthProfile: HealthProfile
   language?: Language
 }): string {
-  const voiceScriptInstruction = language === 'en'
-    ? 'Natural coaching text in English that Dr. Mia reads aloud. Address the user directly. Explain the exercise briefly and clearly, then add one grounded encouraging sentence. Warm and convincing, never theatrical or loud. No all caps. No hype slogans. Maximum 3 sentences.'
-    : 'Natuerlicher Coaching-Text auf Deutsch, den Dr. Mia vorliest. Duze den Nutzer. Erklaere die Uebung kurz und klar, dann ein motivierender Satz — warm und ueberzeugend, nie theatralisch oder laut. Kein Caps Lock, keine Ausrufezeichen-Ketten. Maximal 3 Saetze.'
+  const preferredLanguage = language === 'en' ? 'English' : 'German'
 
   return `Create a personalized physiotherapy training plan.
 
@@ -95,25 +93,38 @@ User profile:
 - Goal: ${healthProfile.goals}
 - Fitness level: ${healthProfile.fitness_level}
 - Session duration: ${healthProfile.session_duration_minutes} minutes
+- Preferred app language: ${preferredLanguage}
 
 Respond with the following JSON format:
 {
   "exercises": [
     {
-      "name": "Exercise name",
-      "description": "Brief description of how to perform the exercise",
+      "id": "neck-circles-1",
       "phase": "warmup",
       "duration_seconds": 30,
       "repetitions": null,
       "sets": null,
-      "voice_script": "${voiceScriptInstruction}"
+      "translations": {
+        "de": {
+          "name": "Nackenkreise",
+          "description": "Kurze deutsche Beschreibung der Uebungsausfuehrung",
+          "voice_script": "Natuerlicher Coaching-Text auf Deutsch, den Dr. Mia vorliest. Duze den Nutzer. Erklaere die Uebung kurz und klar, dann ein motivierender Satz. Warm und ueberzeugend, nie theatralisch oder laut. Maximal 3 Saetze."
+        },
+        "en": {
+          "name": "Neck circles",
+          "description": "Short English description of how to perform the exercise",
+          "voice_script": "Natural coaching text in English that Dr. Mia reads aloud. Address the user directly. Explain the exercise briefly and clearly, then add one grounded encouraging sentence. Warm and convincing, never theatrical or loud. Maximum 3 sentences."
+        }
+      }
     }
   ]
 }
 
 Create 3-4 warm-up exercises, 4-6 main exercises, and 2-3 cool-down exercises.
 Adjust the total duration to fit ${healthProfile.session_duration_minutes} minutes.
-Use ONLY "warmup", "main", or "cooldown" as phase values.`
+Use ONLY "warmup", "main", or "cooldown" as phase values.
+The "id" must be a canonical, language-agnostic lowercase kebab-case identifier.
+Every exercise must include both "de" and "en" translations.`
 }
 
 export function buildFeedbackPrompt(feedback: SessionFeedback[]): string {
@@ -128,7 +139,10 @@ Please adjust the training plan accordingly:
 - "manageable": keep the exercise broadly as-is
 - "well_tolerated": keep the exercise as-is; if most exercises are well tolerated, consider a slight progression
 
-Respond with the updated plan in the same JSON format as before. No markdown code blocks.`
+Respond with the updated plan in the same JSON format as before.
+Keep an exercise id stable if the exercise stays fundamentally the same.
+If you replace an exercise with a different movement, assign a new canonical id.
+No markdown code blocks.`
 }
 
 export function buildDrMiaSystemPrompt(params: {

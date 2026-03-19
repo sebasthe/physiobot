@@ -1,7 +1,10 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, Calendar, Download, Eye, Mail, ShieldPlus, Trash2, User } from 'lucide-react'
+import { useI18n } from '@/components/i18n/I18nProvider'
 import { Input } from '@/components/ui/input'
+import { persistLanguageCookie } from '@/lib/i18n/client'
+import { toLocaleTag } from '@/lib/i18n/config'
 import { useSoftNavigation } from '@/lib/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Language, PrivacyConsent, Schedule } from '@/lib/types'
@@ -32,16 +35,6 @@ interface MemoryItem {
   createdAt?: string | null
 }
 
-const WEEK_DAYS = [
-  { day: 1, label: 'Mo' },
-  { day: 2, label: 'Di' },
-  { day: 3, label: 'Mi' },
-  { day: 4, label: 'Do' },
-  { day: 5, label: 'Fr' },
-  { day: 6, label: 'Sa' },
-  { day: 0, label: 'So' },
-]
-
 function normalizeTime(timeValue: string | undefined) {
   if (!timeValue) return '07:30'
   return timeValue.slice(0, 5)
@@ -57,6 +50,7 @@ export default function SettingsClient({
   physioInfo,
   isSelfCreatedPlan,
 }: Props) {
+  const { locale, setLocale } = useI18n()
   const supabase = createClient()
   const router = useSoftNavigation()
 
@@ -89,6 +83,154 @@ export default function SettingsClient({
   const [privacyLoading, setPrivacyLoading] = useState(false)
   const [memoryLoading, setMemoryLoading] = useState(false)
   const [accountDeletionLoading, setAccountDeletionLoading] = useState(false)
+  const weekDays = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(toLocaleTag(locale), { weekday: 'short' })
+    const monday = new Date(Date.UTC(2024, 0, 1))
+    return [0, 1, 2, 3, 4, 5, 6].map(offset => {
+      const date = new Date(monday)
+      date.setUTCDate(monday.getUTCDate() + offset)
+      const jsDay = offset === 6 ? 0 : offset + 1
+      return {
+        day: jsDay,
+        label: formatter.format(date).replace('.', ''),
+      }
+    })
+  }, [locale])
+  const copy = locale === 'en'
+    ? {
+        scheduleTitle: 'Training rhythm',
+        timeLabel: 'Time',
+        timezoneLabel: 'Time zone',
+        saveSchedule: 'Save rhythm',
+        selectTrainingDay: 'Please select at least one training day.',
+        scheduleError: 'Could not save rhythm.',
+        scheduleSaved: 'Rhythm saved.',
+        languageTitle: 'App language',
+        languageCopy: 'Choose the language for the interface, training plan, and coaching voice. The whole app switches together.',
+        achievementsTitle: 'Shortcuts',
+        achievementRhythm: 'Rhythm',
+        achievementRoutine: 'Routine',
+        achievementCoach: 'Coach',
+        achievementProfile: 'Profile',
+        viewBadges: 'View badges',
+        accountTitle: 'Account',
+        nameLabel: 'Name',
+        namePlaceholder: 'Your name',
+        saveName: 'Save name',
+        nameError: 'Could not update name.',
+        nameSaved: 'Name saved.',
+        emailLabel: 'Email',
+        emailPlaceholder: 'you@email.com',
+        saveEmail: 'Change email',
+        emailSaved: 'Confirmation email sent. Please check your inbox.',
+        passwordLabel: 'New password',
+        passwordPlaceholder: 'At least 8 characters',
+        passwordConfirmPlaceholder: 'Repeat password',
+        savePassword: 'Change password',
+        passwordTooShort: 'Password must be at least 8 characters.',
+        passwordMismatch: 'Password confirmation does not match.',
+        passwordSaved: 'Password updated.',
+        privacyTitle: 'Privacy',
+        privacyCopy: 'Choose how much personal context PhysioBot may retain between sessions.',
+        privacyFull: 'Full',
+        privacyFullHint: 'Coaching and health context stays available.',
+        privacyMinimal: 'Minimal',
+        privacyMinimalHint: 'Only operational telemetry stays available.',
+        privacyNone: 'No storage',
+        privacyNoneHint: 'Do not store new personal memories.',
+        privacyError: 'Could not save privacy setting.',
+        privacySaved: 'Privacy setting saved.',
+        loadMemories: 'View memories',
+        clearMemories: 'Delete memories',
+        exportData: 'Export data',
+        deleteAccount: 'Delete account',
+        loading: 'Loading...',
+        deleting: 'Deleting...',
+        noMemoriesFound: 'No stored memories found.',
+        memoriesLoadError: 'Could not load memories.',
+        clearMemoriesConfirm: 'Delete all stored memories?',
+        memoriesDeleted: 'Memories deleted.',
+        memoriesDeleteError: 'Could not delete memories.',
+        noMemoriesAvailable: 'No memories available.',
+        classLabel: 'Class',
+        noDate: 'No date',
+        deleteAccountConfirm: 'Delete account and stored data now? This step cannot be undone.',
+        deleteAccountError: 'Could not delete account data.',
+        physioTitle: 'Physiotherapy',
+        physioId: 'ID',
+        physioName: 'Name',
+        physioAddress: 'Address',
+        notProvided: 'Not provided',
+        selfCreatedPlan: 'You created your plan yourself and currently have no assigned physio.',
+        noPhysioAssigned: 'No physiotherapist is currently assigned.',
+      }
+    : {
+        scheduleTitle: 'Trainingsrhythmus',
+        timeLabel: 'Uhrzeit',
+        timezoneLabel: 'Zeitzone',
+        saveSchedule: 'Rhythmus speichern',
+        selectTrainingDay: 'Bitte mindestens einen Trainingstag auswählen.',
+        scheduleError: 'Rhythmus konnte nicht gespeichert werden.',
+        scheduleSaved: 'Rhythmus gespeichert.',
+        languageTitle: 'App-Sprache',
+        languageCopy: 'Waehle die Sprache fuer Oberflaeche, Trainingsplan und Coaching-Stimme. Die ganze App wechselt gemeinsam.',
+        achievementsTitle: 'Erfolge',
+        achievementRhythm: 'Rhythmus',
+        achievementRoutine: 'Routine',
+        achievementCoach: 'Coach',
+        achievementProfile: 'Profil',
+        viewBadges: 'Badges ansehen',
+        accountTitle: 'Konto',
+        nameLabel: 'Name',
+        namePlaceholder: 'Dein Name',
+        saveName: 'Name speichern',
+        nameError: 'Name konnte nicht aktualisiert werden.',
+        nameSaved: 'Name gespeichert.',
+        emailLabel: 'E-Mail',
+        emailPlaceholder: 'du@email.de',
+        saveEmail: 'E-Mail ändern',
+        emailSaved: 'Bestätigungs-Mail gesendet. Bitte neues Postfach prüfen.',
+        passwordLabel: 'Neues Passwort',
+        passwordPlaceholder: 'Mindestens 8 Zeichen',
+        passwordConfirmPlaceholder: 'Passwort wiederholen',
+        savePassword: 'Passwort ändern',
+        passwordTooShort: 'Passwort muss mindestens 8 Zeichen haben.',
+        passwordMismatch: 'Passwort-Bestätigung stimmt nicht überein.',
+        passwordSaved: 'Passwort aktualisiert.',
+        privacyTitle: 'Datenschutz',
+        privacyCopy: 'Lege fest, wie viel persoenlichen Kontext PhysioBot zwischen Sessions behalten darf.',
+        privacyFull: 'Voll',
+        privacyFullHint: 'Coach- und Gesundheitskontext bleibt verfuegbar.',
+        privacyMinimal: 'Minimal',
+        privacyMinimalHint: 'Nur betriebliche Telemetrie bleibt erhalten.',
+        privacyNone: 'Keine Speicherung',
+        privacyNoneHint: 'Keine neuen persoenlichen Erinnerungen speichern.',
+        privacyError: 'Datenschutz-Einstellung konnte nicht gespeichert werden.',
+        privacySaved: 'Datenschutz-Einstellung gespeichert.',
+        loadMemories: 'Erinnerungen ansehen',
+        clearMemories: 'Erinnerungen loeschen',
+        exportData: 'Daten exportieren',
+        deleteAccount: 'Konto loeschen',
+        loading: 'Laden...',
+        deleting: 'Loeschen...',
+        noMemoriesFound: 'Keine gespeicherten Erinnerungen gefunden.',
+        memoriesLoadError: 'Erinnerungen konnten nicht geladen werden.',
+        clearMemoriesConfirm: 'Alle gespeicherten Erinnerungen wirklich loeschen?',
+        memoriesDeleted: 'Erinnerungen geloescht.',
+        memoriesDeleteError: 'Erinnerungen konnten nicht geloescht werden.',
+        noMemoriesAvailable: 'Keine Erinnerungen verfuegbar.',
+        classLabel: 'Klasse',
+        noDate: 'Ohne Datum',
+        deleteAccountConfirm: 'Konto und gespeicherte Daten jetzt loeschen? Dieser Schritt ist nicht rueckgaengig.',
+        deleteAccountError: 'Kontodaten konnten nicht geloescht werden.',
+        physioTitle: 'Physiotherapie',
+        physioId: 'ID',
+        physioName: 'Name',
+        physioAddress: 'Anschrift',
+        notProvided: 'Nicht hinterlegt',
+        selfCreatedPlan: 'Du hast deinen Plan selbst erstellt und nutzt aktuell keinen zugeordneten Physio.',
+        noPhysioAssigned: 'Derzeit ist kein Physiotherapeut zugeordnet.',
+      }
 
   const toggleDay = (day: number) => {
     setSelectedDays(prev => {
@@ -99,7 +241,7 @@ export default function SettingsClient({
 
   const saveSchedule = async () => {
     if (selectedDays.length === 0) {
-      setScheduleMessage('Bitte mindestens einen Trainingstag auswählen.')
+      setScheduleMessage(copy.selectTrainingDay)
       return
     }
     setScheduleLoading(true)
@@ -119,9 +261,9 @@ export default function SettingsClient({
       )
 
     if (error) {
-      setScheduleMessage('Rhythmus konnte nicht gespeichert werden.')
+      setScheduleMessage(copy.scheduleError)
     } else {
-      setScheduleMessage('Rhythmus gespeichert.')
+      setScheduleMessage(copy.scheduleSaved)
     }
     setScheduleLoading(false)
   }
@@ -136,9 +278,12 @@ export default function SettingsClient({
 
     if (error) {
       setLanguage(previousLanguage)
-      setLanguageMessage('Sprache konnte nicht gespeichert werden.')
+      setLanguageMessage(locale === 'en' ? 'App language could not be saved.' : 'Sprache konnte nicht gespeichert werden.')
     } else {
-      setLanguageMessage(newLanguage === 'de' ? 'Sprache gespeichert.' : 'Language saved.')
+      persistLanguageCookie(newLanguage)
+      setLocale(newLanguage)
+      router.refresh()
+      setLanguageMessage(newLanguage === 'en' ? 'Language saved.' : 'Sprache gespeichert.')
     }
     setLanguageLoading(false)
   }
@@ -153,9 +298,9 @@ export default function SettingsClient({
       .eq('id', userId)
 
     if (error) {
-      setProfileMessage('Name konnte nicht aktualisiert werden.')
+      setProfileMessage(copy.nameError)
     } else {
-      setProfileMessage('Name gespeichert.')
+      setProfileMessage(copy.nameSaved)
     }
     setProfileLoading(false)
   }
@@ -168,18 +313,18 @@ export default function SettingsClient({
     if (error) {
       setEmailMessage(error.message)
     } else {
-      setEmailMessage('Bestätigungs-Mail gesendet. Bitte neues Postfach prüfen.')
+      setEmailMessage(copy.emailSaved)
     }
     setEmailLoading(false)
   }
 
   const savePassword = async () => {
     if (newPassword.length < 8) {
-      setPasswordMessage('Passwort muss mindestens 8 Zeichen haben.')
+      setPasswordMessage(copy.passwordTooShort)
       return
     }
     if (newPassword !== confirmPassword) {
-      setPasswordMessage('Passwort-Bestätigung stimmt nicht überein.')
+      setPasswordMessage(copy.passwordMismatch)
       return
     }
 
@@ -190,7 +335,7 @@ export default function SettingsClient({
     if (error) {
       setPasswordMessage(error.message)
     } else {
-      setPasswordMessage('Passwort aktualisiert.')
+      setPasswordMessage(copy.passwordSaved)
       setNewPassword('')
       setConfirmPassword('')
     }
@@ -209,9 +354,9 @@ export default function SettingsClient({
 
     if (error) {
       setPrivacyConsent(privacyConsent)
-      setPrivacyMessage('Datenschutz-Einstellung konnte nicht gespeichert werden.')
+      setPrivacyMessage(copy.privacyError)
     } else {
-      setPrivacyMessage('Datenschutz-Einstellung gespeichert.')
+      setPrivacyMessage(copy.privacySaved)
     }
 
     setPrivacyLoading(false)
@@ -227,23 +372,23 @@ export default function SettingsClient({
       })
       const payload = await response.json().catch(() => ({})) as { memories?: MemoryItem[]; error?: string }
       if (!response.ok) {
-        throw new Error(payload.error ?? 'Erinnerungen konnten nicht geladen werden.')
+        throw new Error(payload.error ?? copy.memoriesLoadError)
       }
 
       setMemories(payload.memories ?? [])
       setShowMemories(true)
       if ((payload.memories ?? []).length === 0) {
-        setMemoryMessage('Keine gespeicherten Erinnerungen gefunden.')
+        setMemoryMessage(copy.noMemoriesFound)
       }
     } catch (error) {
-      setMemoryMessage(error instanceof Error ? error.message : 'Erinnerungen konnten nicht geladen werden.')
+      setMemoryMessage(error instanceof Error ? error.message : copy.memoriesLoadError)
     } finally {
       setMemoryLoading(false)
     }
   }
 
   const clearMemories = async () => {
-    if (typeof window !== 'undefined' && !window.confirm('Alle gespeicherten Erinnerungen wirklich loeschen?')) {
+    if (typeof window !== 'undefined' && !window.confirm(copy.clearMemoriesConfirm)) {
       return
     }
 
@@ -257,14 +402,14 @@ export default function SettingsClient({
       })
       const payload = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) {
-        throw new Error(payload.error ?? 'Erinnerungen konnten nicht geloescht werden.')
+        throw new Error(payload.error ?? copy.memoriesDeleteError)
       }
 
       setMemories([])
       setShowMemories(true)
-      setMemoryMessage('Erinnerungen geloescht.')
+      setMemoryMessage(copy.memoriesDeleted)
     } catch (error) {
-      setMemoryMessage(error instanceof Error ? error.message : 'Erinnerungen konnten nicht geloescht werden.')
+      setMemoryMessage(error instanceof Error ? error.message : copy.memoriesDeleteError)
     } finally {
       setMemoryLoading(false)
     }
@@ -273,7 +418,7 @@ export default function SettingsClient({
   const deleteAccountData = async () => {
     if (
       typeof window !== 'undefined'
-      && !window.confirm('Konto und gespeicherte Daten jetzt loeschen? Dieser Schritt ist nicht rueckgaengig.')
+      && !window.confirm(copy.deleteAccountConfirm)
     ) {
       return
     }
@@ -288,33 +433,33 @@ export default function SettingsClient({
       })
       const payload = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) {
-        throw new Error(payload.error ?? 'Kontodaten konnten nicht geloescht werden.')
+        throw new Error(payload.error ?? copy.deleteAccountError)
       }
 
       router.push('/auth/login')
     } catch (error) {
-      setPrivacyMessage(error instanceof Error ? error.message : 'Kontodaten konnten nicht geloescht werden.')
+      setPrivacyMessage(error instanceof Error ? error.message : copy.deleteAccountError)
     } finally {
       setAccountDeletionLoading(false)
     }
   }
 
   return (
-    <div className="space-y-8 md:grid md:grid-cols-2 md:gap-8 md:space-y-0">
-      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
-        <div className="p-6">
-          <h2 className="font-display text-xl uppercase tracking-tight text-white">Trainingsrhythmus</h2>
+    <div className="space-y-6 md:grid md:grid-cols-2 md:gap-8 md:space-y-0">
+      <section className="glass-card rounded-[26px] border-white/5 md:self-start">
+        <div className="p-5 sm:p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">{copy.scheduleTitle}</h2>
         </div>
-        <div className="px-6 pb-6 pt-0">
-          <div className="mb-6 flex flex-wrap gap-2">
-            {WEEK_DAYS.map(({ day, label }) => {
+        <div className="px-5 pb-5 pt-0 sm:px-6 sm:pb-6">
+          <div className="mb-5 flex flex-wrap gap-2">
+            {weekDays.map(({ day, label }) => {
               const active = selectedDays.includes(day)
               return (
                 <button
                   key={day}
                   type="button"
                   onClick={() => toggleDay(day)}
-                  className={`flex h-12 w-12 items-center justify-center rounded-full border text-xs font-semibold transition-all ${
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border text-xs font-semibold transition-all sm:h-12 sm:w-12 ${
                     active ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)] text-[var(--accent)]' : 'border-white/10 text-white/40'
                   }`}
                 >
@@ -323,16 +468,22 @@ export default function SettingsClient({
               )
             })}
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="notifyTime" className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-                Uhrzeit
+                {copy.timeLabel}
               </label>
-              <Input id="notifyTime" type="time" value={notifyTime} onChange={event => setNotifyTime(event.target.value)} className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+              <Input
+                id="notifyTime"
+                type="time"
+                value={notifyTime}
+                onChange={event => setNotifyTime(event.target.value)}
+                className="time-input rounded-xl border-white/5 bg-[var(--surface)] p-3 h-auto text-[0.98rem] tabular-nums"
+              />
             </div>
             <div className="space-y-2">
               <label htmlFor="timezone" className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-                Zeitzone
+                {copy.timezoneLabel}
               </label>
               <Input id="timezone" value={timezone} onChange={event => setTimezone(event.target.value)} className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
             </div>
@@ -341,23 +492,21 @@ export default function SettingsClient({
             type="button"
             onClick={saveSchedule}
             disabled={scheduleLoading}
-            className="mt-6 w-full rounded-xl bg-[var(--secondary)] py-5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+            className="mt-5 w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:mt-6 sm:py-5"
           >
-            {scheduleLoading ? 'Speichern...' : 'Rhythmus speichern'}
+            {scheduleLoading ? '...' : copy.saveSchedule}
           </button>
           {scheduleMessage && <p className="mt-3 text-xs text-white/40">{scheduleMessage}</p>}
         </div>
       </section>
 
-      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
-        <div className="p-6">
-          <h2 className="font-display text-xl uppercase tracking-tight text-white">Coach-Sprache</h2>
+      <section className="glass-card rounded-[26px] border-white/5 md:self-start">
+        <div className="p-5 sm:p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">{copy.languageTitle}</h2>
         </div>
-        <div className="px-6 pb-6 pt-0">
-          <p className="mb-4 text-xs text-white/40">
-            {language === 'de'
-              ? 'In welcher Sprache soll dein Coach mit dir sprechen?'
-              : 'Which language should your coach use?'}
+        <div className="px-5 pb-5 pt-0 sm:px-6 sm:pb-6">
+          <p className="mb-4 text-xs leading-5 text-white/40">
+            {copy.languageCopy}
           </p>
           <div className="flex gap-3">
             {([
@@ -371,7 +520,7 @@ export default function SettingsClient({
                   type="button"
                   disabled={languageLoading}
                   onClick={() => saveLanguage(value)}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-4 text-sm font-semibold transition-all disabled:opacity-60 ${
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-3.5 text-sm font-semibold transition-all disabled:opacity-60 sm:py-4 ${
                     active
                       ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)] text-[var(--accent)]'
                       : 'border-white/10 text-white/40 hover:border-white/20 hover:text-white/60'
@@ -387,17 +536,17 @@ export default function SettingsClient({
         </div>
       </section>
 
-      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
-        <div className="p-6">
-          <h2 className="font-display text-xl uppercase tracking-tight text-white">Erfolge</h2>
+      <section className="glass-card rounded-[26px] border-white/5 md:self-start">
+        <div className="p-5 sm:p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">{copy.achievementsTitle}</h2>
         </div>
-        <div className="px-6 pb-6 pt-0">
+        <div className="px-5 pb-5 pt-0 sm:px-6 sm:pb-6">
           <div className="grid grid-cols-4 gap-4">
             {[
-              { icon: Calendar, label: 'Rhythmus' },
-              { icon: ShieldPlus, label: 'Routine' },
-              { icon: User, label: 'Coach' },
-              { icon: Mail, label: 'Profil' },
+              { icon: Calendar, label: copy.achievementRhythm },
+              { icon: ShieldPlus, label: copy.achievementRoutine },
+              { icon: User, label: copy.achievementCoach },
+              { icon: Mail, label: copy.achievementProfile },
             ].map(({ icon: Icon, label }) => (
               <div key={label} className="flex flex-col items-center gap-2">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/5 bg-white/5 text-[var(--accent)]">
@@ -410,55 +559,55 @@ export default function SettingsClient({
           <button
             type="button"
             onClick={() => router.push('/badges')}
-            className="mt-6 w-full rounded-xl border border-white/5 bg-white/5 py-5 text-sm font-semibold text-white transition-colors hover:bg-white/8"
+            className="mt-5 w-full rounded-xl border border-white/5 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8 sm:mt-6 sm:py-5"
           >
-            Badges ansehen
+            {copy.viewBadges}
           </button>
         </div>
       </section>
 
-      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
-        <div className="p-6">
-          <h2 className="font-display text-xl uppercase tracking-tight text-white">Konto</h2>
+      <section className="glass-card rounded-[26px] border-white/5 md:self-start">
+        <div className="p-5 sm:p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">{copy.accountTitle}</h2>
         </div>
-        <div className="space-y-5 px-6 pb-6 pt-0">
+        <div className="space-y-5 px-5 pb-5 pt-0 sm:px-6 sm:pb-6">
           <div className="space-y-2">
-            <label htmlFor="name" className="text-[10px] uppercase tracking-[0.18em] text-white/40">Name</label>
-            <Input id="name" value={name} onChange={event => setName(event.target.value)} placeholder="Dein Name" className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+            <label htmlFor="name" className="text-[10px] uppercase tracking-[0.18em] text-white/40">{copy.nameLabel}</label>
+            <Input id="name" value={name} onChange={event => setName(event.target.value)} placeholder={copy.namePlaceholder} className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
             <button
               type="button"
               onClick={saveName}
               disabled={profileLoading}
-              className="w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+              className="w-full rounded-xl bg-[var(--secondary)] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:py-4"
             >
-              {profileLoading ? 'Speichern...' : 'Name speichern'}
+              {profileLoading ? '...' : copy.saveName}
             </button>
             {profileMessage && <p className="text-xs text-white/40">{profileMessage}</p>}
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="email" className="text-[10px] uppercase tracking-[0.18em] text-white/40">Email</label>
-            <Input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="du@email.de" className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
+            <label htmlFor="email" className="text-[10px] uppercase tracking-[0.18em] text-white/40">{copy.emailLabel}</label>
+            <Input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder={copy.emailPlaceholder} className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto" />
             <button
               type="button"
               onClick={saveEmail}
               disabled={emailLoading}
-              className="w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+              className="w-full rounded-xl bg-[var(--secondary)] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:py-4"
             >
-              {emailLoading ? 'Speichern...' : 'E-Mail ändern'}
+              {emailLoading ? '...' : copy.saveEmail}
             </button>
             {emailMessage && <p className="text-xs text-white/40">{emailMessage}</p>}
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="text-[10px] uppercase tracking-[0.18em] text-white/40">Neues Passwort</label>
+            <label htmlFor="password" className="text-[10px] uppercase tracking-[0.18em] text-white/40">{copy.passwordLabel}</label>
             <Input
               id="password"
               type="password"
               autoComplete="new-password"
               value={newPassword}
               onChange={event => setNewPassword(event.target.value)}
-              placeholder="Mindestens 8 Zeichen"
+              placeholder={copy.passwordPlaceholder}
               className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto"
             />
             <Input
@@ -467,36 +616,36 @@ export default function SettingsClient({
               autoComplete="new-password"
               value={confirmPassword}
               onChange={event => setConfirmPassword(event.target.value)}
-              placeholder="Passwort wiederholen"
+              placeholder={copy.passwordConfirmPlaceholder}
               className="rounded-xl bg-[var(--surface)] border-white/5 p-3 h-auto"
             />
             <button
               type="button"
               onClick={savePassword}
               disabled={passwordLoading}
-              className="w-full rounded-xl bg-[var(--secondary)] py-4 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+              className="w-full rounded-xl bg-[var(--secondary)] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:py-4"
             >
-              {passwordLoading ? 'Speichern...' : 'Passwort ändern'}
+              {passwordLoading ? '...' : copy.savePassword}
             </button>
             {passwordMessage && <p className="text-xs text-white/40">{passwordMessage}</p>}
           </div>
         </div>
       </section>
 
-      <section className="glass-card rounded-[28px] border-white/5 md:self-start">
-        <div className="p-6">
-          <h2 className="font-display text-xl uppercase tracking-tight text-white">Datenschutz</h2>
+      <section className="glass-card rounded-[26px] border-white/5 md:self-start">
+        <div className="p-5 sm:p-6">
+          <h2 className="font-display text-xl uppercase tracking-tight text-white">{copy.privacyTitle}</h2>
         </div>
-        <div className="space-y-5 px-6 pb-6 pt-0">
+        <div className="space-y-5 px-5 pb-5 pt-0 sm:px-6 sm:pb-6">
           <div className="space-y-3">
             <p className="text-xs text-white/40">
-              Lege fest, wie viel persoenlichen Kontext PhysioBot zwischen Sessions behalten darf.
+              {copy.privacyCopy}
             </p>
             <div className="grid gap-3">
               {[
-                { value: 'full' as PrivacyConsent, label: 'Voll', hint: 'Coach- und Gesundheitskontext bleibt verfuegbar.' },
-                { value: 'minimal' as PrivacyConsent, label: 'Minimal', hint: 'Nur betriebliche Telemetrie bleibt erhalten.' },
-                { value: 'none' as PrivacyConsent, label: 'Keine Speicherung', hint: 'Keine neuen persoenlichen Erinnerungen speichern.' },
+                { value: 'full' as PrivacyConsent, label: copy.privacyFull, hint: copy.privacyFullHint },
+                { value: 'minimal' as PrivacyConsent, label: copy.privacyMinimal, hint: copy.privacyMinimalHint },
+                { value: 'none' as PrivacyConsent, label: copy.privacyNone, hint: copy.privacyNoneHint },
               ].map(option => {
                 const active = privacyConsent === option.value
                 return (
@@ -505,7 +654,7 @@ export default function SettingsClient({
                     type="button"
                     disabled={privacyLoading}
                     onClick={() => savePrivacyConsent(option.value)}
-                    className={`rounded-2xl border px-4 py-4 text-left transition-all disabled:opacity-60 ${
+                    className={`rounded-2xl border px-4 py-3.5 text-left transition-all disabled:opacity-60 sm:py-4 ${
                       active
                         ? 'border-[var(--accent)] bg-[rgba(42,157,138,0.12)]'
                         : 'border-white/10 bg-white/5 hover:border-white/20'
@@ -529,7 +678,7 @@ export default function SettingsClient({
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8 disabled:opacity-60"
               >
                 <Eye size={16} />
-                {memoryLoading ? 'Laden...' : 'Erinnerungen ansehen'}
+                {memoryLoading ? copy.loading : copy.loadMemories}
               </button>
               <button
                 type="button"
@@ -538,14 +687,14 @@ export default function SettingsClient({
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8 disabled:opacity-60"
               >
                 <Trash2 size={16} />
-                Erinnerungen loeschen
+                {copy.clearMemories}
               </button>
               <a
                 href="/api/privacy/export"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/8"
               >
                 <Download size={16} />
-                Daten exportieren
+                {copy.exportData}
               </a>
               <button
                 type="button"
@@ -554,23 +703,23 @@ export default function SettingsClient({
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-[rgba(231,111,81,0.45)] bg-[rgba(231,111,81,0.12)] py-4 text-sm font-semibold text-[rgb(255,194,178)] transition-colors hover:bg-[rgba(231,111,81,0.18)] disabled:opacity-60"
               >
                 <AlertTriangle size={16} />
-                {accountDeletionLoading ? 'Loeschen...' : 'Konto loeschen'}
+                {accountDeletionLoading ? copy.deleting : copy.deleteAccount}
               </button>
             </div>
             {memoryMessage && <p className="text-xs text-white/40">{memoryMessage}</p>}
             {showMemories && (
               <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                 {memories.length === 0 ? (
-                  <p className="text-sm text-white/45">Keine Erinnerungen verfuegbar.</p>
+                  <p className="text-sm text-white/45">{copy.noMemoriesAvailable}</p>
                 ) : (
                   memories.map(memory => (
                     <div key={memory.id} className="rounded-xl border border-white/10 bg-[rgba(0,0,0,0.18)] p-4">
                       <div className="mb-2 flex items-center justify-between gap-4">
                         <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getDataClassBadgeClasses(memory.dataClass)}`}>
-                          Klasse {memory.dataClass}
+                          {copy.classLabel} {memory.dataClass}
                         </span>
                         <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">
-                          {memory.createdAt ? new Date(memory.createdAt).toLocaleDateString() : 'Ohne Datum'}
+                          {memory.createdAt ? new Date(memory.createdAt).toLocaleDateString(toLocaleTag(locale)) : copy.noDate}
                         </span>
                       </div>
                       <p className="text-sm text-white/80">{memory.content}</p>
@@ -584,19 +733,19 @@ export default function SettingsClient({
         </div>
       </section>
 
-      <section className="glass-card rounded-[28px] border-white/5 p-6 md:self-start">
-        <h2 className="mb-2 font-display text-xl uppercase tracking-tight text-white">Physiotherapie</h2>
+      <section className="glass-card rounded-[26px] border-white/5 p-5 md:self-start md:p-6">
+        <h2 className="mb-2 font-display text-xl uppercase tracking-tight text-white">{copy.physioTitle}</h2>
         {physioInfo ? (
           <div className="space-y-2 text-sm text-white/75">
-            <p><span className="font-semibold text-white">ID:</span> {physioInfo.id}</p>
-            <p><span className="font-semibold text-white">Name:</span> {physioInfo.name ?? 'Nicht hinterlegt'}</p>
-            <p><span className="font-semibold text-white">Anschrift:</span> {physioInfo.address ?? 'Nicht hinterlegt'}</p>
+            <p><span className="font-semibold text-white">{copy.physioId}:</span> {physioInfo.id}</p>
+            <p><span className="font-semibold text-white">{copy.physioName}:</span> {physioInfo.name ?? copy.notProvided}</p>
+            <p><span className="font-semibold text-white">{copy.physioAddress}:</span> {physioInfo.address ?? copy.notProvided}</p>
           </div>
         ) : (
           <p className="text-sm text-white/40">
             {isSelfCreatedPlan
-              ? 'Du hast deinen Plan selbst erstellt und nutzt aktuell keinen zugeordneten Physio.'
-              : 'Derzeit ist kein Physiotherapeut zugeordnet.'}
+              ? copy.selfCreatedPlan
+              : copy.noPhysioAssigned}
           </p>
         )}
       </section>

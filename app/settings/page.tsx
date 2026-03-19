@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
 import TransitionLink from '@/components/navigation/TransitionLink'
+import { getMessages } from '@/lib/i18n/messages'
+import { getRequestLanguage } from '@/lib/i18n/server'
 import { createClient } from '@/lib/supabase/server'
 import type { Language, PrivacyConsent, Schedule } from '@/lib/types'
 import { DEFAULT_USER_PERSONALITY } from '@/lib/user-personality'
@@ -22,6 +24,8 @@ interface ProfileWithActivePlan {
 }
 
 export default async function SettingsPage() {
+  const locale = await getRequestLanguage()
+  const messages = getMessages(locale)
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
@@ -71,22 +75,26 @@ export default async function SettingsPage() {
 
   return (
     <main className="vital-gradient min-h-screen pb-12 lg:min-h-full">
-      <div className="px-6 pt-12 md:px-8 md:pb-8 lg:px-10 lg:pb-10 xl:px-12 xl:pt-14">
-        <div className="mb-10 md:flex md:items-end md:justify-between md:gap-8">
-          <div>
-            <TransitionLink href="/dashboard" className="mb-8 inline-flex items-center gap-2 p-0 text-sm font-semibold text-[var(--accent)] transition-colors hover:text-[color:rgba(42,157,138,0.8)]">
-              ← Zurück zum Dashboard
-            </TransitionLink>
-            <span className="mb-2 block text-xs font-medium uppercase tracking-[0.28em] text-[rgba(42,157,138,0.6)]">Einstellungen</span>
-            <h1 className="font-display text-6xl uppercase tracking-tight text-white">Dein Profil.</h1>
-            <p className="mt-2 text-sm text-white/40">
-              Trainingstage, Erinnerungszeit und Kontodaten verwalten.
-            </p>
+      <div className="px-5 pt-6 md:px-8 md:pb-8 md:pt-12 lg:px-10 lg:pb-10 xl:px-12 xl:pt-14">
+        <section className="surface-card mb-5 rounded-[1.85rem] p-4 md:mb-10 md:rounded-[2rem] md:p-7">
+          <div className="md:flex md:items-end md:justify-between md:gap-8">
+            <div>
+              <TransitionLink href="/dashboard" className="mb-4 inline-flex items-center gap-2 p-0 text-sm font-semibold text-[var(--accent)] transition-colors hover:text-[color:rgba(42,157,138,0.8)]">
+                {messages.common.backToDashboard}
+              </TransitionLink>
+              <span className="mb-2 block text-xs font-medium uppercase tracking-[0.28em] text-[rgba(42,157,138,0.6)]">{messages.settings.eyebrow}</span>
+              <h1 className="font-display text-[clamp(2.45rem,11.5vw,4.9rem)] uppercase leading-[0.94] tracking-tight text-white">
+                {messages.settings.title}
+              </h1>
+              <p className="mt-2.5 max-w-[29rem] text-sm leading-6 text-white/46 md:mt-3 md:max-w-[32rem] md:leading-7">
+                {messages.settings.copy}
+              </p>
+            </div>
+            <div className="mt-5 hidden rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.18em] text-white/45 md:block md:max-w-xs">
+              {messages.settings.desktopHint}
+            </div>
           </div>
-          <div className="mt-6 rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.18em] text-white/45 md:mt-0 md:max-w-xs">
-            Desktop bündelt die Einstellungen in einem zweispaltigen Workspace.
-          </div>
-        </div>
+        </section>
 
         <SettingsClient
           userId={user.id}

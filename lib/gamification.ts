@@ -11,7 +11,7 @@ export interface GamificationResult {
   xpEarned: number
   newXP: number
   newLevel: number
-  levelTitle: string
+  levelTitleKey: string
   newStreak: number
   longestStreak: number
   newBadges: string[]
@@ -71,7 +71,7 @@ export async function updateGamification(
     xpEarned,
     newXP,
     newLevel: levelInfo.level,
-    levelTitle: levelInfo.title,
+    levelTitleKey: levelInfo.titleKey,
     newStreak,
     longestStreak: newLongest,
     newBadges,

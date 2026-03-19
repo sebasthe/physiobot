@@ -14,55 +14,15 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react'
+import { useI18n } from '@/components/i18n/I18nProvider'
+import { localizeExercises } from '@/lib/exercises'
 import { createClient } from '@/lib/supabase/client'
-import type { Exercise, SessionFeedback } from '@/lib/types'
+import type { Exercise, SessionFeedback, StoredExercise } from '@/lib/types'
 import { XP_PER_PHASE } from '@/lib/types'
 import type { TranscriptMessage } from '@/lib/mem0'
 
-const PHASE_LABELS: Record<Exercise['phase'], string> = {
-  warmup: 'Warm-up',
-  main: 'Hauptteil',
-  cooldown: 'Cool-down',
-}
-
-const FEEDBACK_OPTIONS: Array<{
-  value: SessionFeedback['difficulty']
-  label: string
-  icon: LucideIcon
-  color: string
-  background: string
-}> = [
-  {
-    value: 'well_tolerated',
-    label: 'Gut vertragen',
-    icon: CheckCircle2,
-    color: '#63CDB9',
-    background: 'rgba(99,205,185,0.14)',
-  },
-  {
-    value: 'manageable',
-    label: 'Noch okay',
-    icon: Activity,
-    color: '#63B2FF',
-    background: 'rgba(99,178,255,0.14)',
-  },
-  {
-    value: 'too_intense',
-    label: 'Zu intensiv',
-    icon: Flame,
-    color: '#F0A04B',
-    background: 'rgba(240,160,75,0.14)',
-  },
-  {
-    value: 'painful',
-    label: 'Beschwerden',
-    icon: AlertTriangle,
-    color: '#E85D5D',
-    background: 'rgba(232,93,93,0.14)',
-  },
-] as const
-
 function FeedbackForm() {
+  const { locale, messages } = useI18n()
   const [feedbacks, setFeedbacks] = useState<SessionFeedback[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [completedExercises, setCompletedExercises] = useState<Exercise[]>([])
@@ -72,6 +32,47 @@ function FeedbackForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session')
+  const phaseLabels: Record<Exercise['phase'], string> = {
+    warmup: messages.feedback.phaseLabels.warmup,
+    main: messages.feedback.phaseLabels.main,
+    cooldown: messages.feedback.phaseLabels.cooldown,
+  }
+  const feedbackOptions: Array<{
+    value: SessionFeedback['difficulty']
+    label: string
+    icon: LucideIcon
+    color: string
+    background: string
+  }> = [
+    {
+      value: 'well_tolerated',
+      label: messages.feedback.options.well_tolerated,
+      icon: CheckCircle2,
+      color: '#63CDB9',
+      background: 'rgba(99,205,185,0.14)',
+    },
+    {
+      value: 'manageable',
+      label: messages.feedback.options.manageable,
+      icon: Activity,
+      color: '#63B2FF',
+      background: 'rgba(99,178,255,0.14)',
+    },
+    {
+      value: 'too_intense',
+      label: messages.feedback.options.too_intense,
+      icon: Flame,
+      color: '#F0A04B',
+      background: 'rgba(240,160,75,0.14)',
+    },
+    {
+      value: 'painful',
+      label: messages.feedback.options.painful,
+      icon: AlertTriangle,
+      color: '#E85D5D',
+      background: 'rgba(232,93,93,0.14)',
+    },
+  ]
 
   useEffect(() => {
     void loadExercises()
@@ -87,11 +88,14 @@ function FeedbackForm() {
   useEffect(() => {
     if (reviewExercises.length === 0) return
 
-    setFeedbacks(current => reviewExercises.map((_, index) => ({
-      exercise_id: String(index),
-      difficulty: current[index]?.difficulty ?? 'well_tolerated',
-      notes: current[index]?.notes,
-    })))
+    setFeedbacks(current => reviewExercises.map(exercise => {
+      const existing = current.find(item => item.exercise_id === exercise.id)
+      return {
+        exercise_id: exercise.id,
+        difficulty: existing?.difficulty ?? 'well_tolerated',
+        notes: existing?.notes,
+      }
+    }))
   }, [reviewExercises])
 
   const loadStoredSessionData = () => {
@@ -130,7 +134,7 @@ function FeedbackForm() {
         .single()
       if (!plan) return
 
-      const planExercises = plan.exercises as Exercise[]
+      const planExercises = localizeExercises(plan.exercises as StoredExercise[], locale)
       setExercises(planExercises)
       setLoaded(true)
       return
@@ -150,7 +154,7 @@ function FeedbackForm() {
       .single()
     if (!plan) return
 
-    const planExercises = plan.exercises as Exercise[]
+    const planExercises = localizeExercises(plan.exercises as StoredExercise[], locale)
     setExercises(planExercises)
     setLoaded(true)
   }
@@ -189,10 +193,10 @@ function FeedbackForm() {
 
   const isBusy = submitMode !== null
   const actionLabel = submitMode === 'submit'
-    ? 'Plan wird angepasst...'
+    ? messages.feedback.sending
     : submitMode === 'skip'
-      ? 'Wird übersprungen...'
-      : 'Feedback senden'
+      ? messages.feedback.skipping
+      : messages.feedback.send
 
   return (
     <main className="feedback-page vital-gradient relative min-h-screen overflow-x-hidden">
@@ -203,41 +207,40 @@ function FeedbackForm() {
         }}
       />
 
-      <div className="feedback-page__shell relative z-10 mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pb-[calc(8.5rem+var(--safe-bottom))] pt-8 md:max-w-3xl md:px-6 lg:max-w-6xl lg:px-8 lg:pb-10 lg:pt-10">
-        <section className="feedback-page__header animate-slide-up px-2 pb-8 pt-3 text-center md:px-0 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,0.8fr)] lg:items-center lg:gap-10 lg:text-left">
+      <div className="feedback-page__shell relative z-10 mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pb-[calc(8.25rem+var(--safe-bottom))] pt-4 md:max-w-3xl md:px-6 lg:max-w-6xl lg:px-8 lg:pb-10 lg:pt-10">
+        <section className="feedback-page__header animate-slide-up px-1 pb-4 pt-1 text-center md:px-0 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(18rem,0.8fr)] lg:items-center lg:gap-10 lg:text-left">
           <div>
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-[rgba(240,160,75,0.18)] bg-[rgba(240,160,75,0.12)] text-[var(--primary)] lg:mx-0">
-              <Trophy size={38} strokeWidth={2.25} />
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-[rgba(240,160,75,0.18)] bg-[rgba(240,160,75,0.12)] text-[var(--primary)] lg:mx-0 lg:mb-6 lg:h-20 lg:w-20">
+              <Trophy size={28} strokeWidth={2.25} />
             </div>
-            <div className="text-phase mb-3" style={{ color: 'var(--primary)' }}>
-              Session geschafft
+            <div className="text-phase mb-1.5" style={{ color: 'var(--primary)' }}>
+              {messages.feedback.eyebrow}
             </div>
-            <h1 className="font-display text-[clamp(3.6rem,12vw,5.8rem)] uppercase leading-[0.9] tracking-[0.01em] text-[var(--foreground)]">
-              Stark <span className="italic text-[var(--accent)]">gemacht</span>
+            <h1 className="font-display text-[clamp(2.45rem,10.5vw,5.4rem)] uppercase leading-[0.94] tracking-[0.01em] text-[var(--foreground)]">
+              {messages.feedback.titleLead} <span className="italic text-[var(--accent)]">{messages.feedback.titleAccent}</span>
             </h1>
-            <p className="mx-auto mt-4 max-w-[28rem] text-sm leading-7 text-white/46 lg:mx-0">
-              Dr. Mia passt deinen Plan anhand deines Feedbacks an. Wenn du heute nichts anpassen willst,
-              kannst du die Auswertung auch direkt überspringen.
+            <p className="mx-auto mt-2 max-w-[24rem] text-[0.92rem] leading-6 text-white/46 lg:mx-0 lg:mt-4 lg:max-w-[26rem] lg:text-sm lg:leading-7">
+              {messages.feedback.copy}
             </p>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-3 lg:mt-0">
-            <div className="metric-card p-4 text-center">
-              <Zap className="mx-auto mb-2 text-[var(--accent)]" size={22} />
-              <div className="font-display text-2xl leading-none text-white">+{xpGained}</div>
-              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">XP</div>
+          <div className="mt-4 grid grid-cols-3 gap-2 lg:mt-0 lg:gap-3">
+            <div className="metric-card p-2.5 text-center lg:p-4">
+              <Zap className="mx-auto mb-1.5 text-[var(--accent)]" size={18} />
+              <div className="font-display text-[1.65rem] leading-none text-white lg:text-2xl">+{xpGained}</div>
+              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">{messages.feedback.xp}</div>
             </div>
-            <div className="metric-card p-4 text-center">
-              <Flame className="mx-auto mb-2 text-[var(--primary)]" size={22} />
-              <div className="font-display text-2xl leading-none text-white">+1</div>
-              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">Streak</div>
+            <div className="metric-card p-2.5 text-center lg:p-4">
+              <Flame className="mx-auto mb-1.5 text-[var(--primary)]" size={18} />
+              <div className="font-display text-[1.65rem] leading-none text-white lg:text-2xl">+1</div>
+              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">{messages.feedback.streak}</div>
             </div>
-            <div className="metric-card p-4 text-center">
-              <Wind className="mx-auto mb-2 text-[var(--accent)]" size={22} />
-              <div className="font-display text-2xl leading-none text-white">
+            <div className="metric-card p-2.5 text-center lg:p-4">
+              <Wind className="mx-auto mb-1.5 text-[var(--accent)]" size={18} />
+              <div className="font-display text-[1.65rem] leading-none text-white lg:text-2xl">
                 {reviewExercises.length}
               </div>
-              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">Übungen</div>
+              <div className="mt-1 text-[9px] uppercase tracking-[0.24em] text-white/36">{messages.feedback.exercises}</div>
             </div>
           </div>
         </section>
@@ -248,26 +251,25 @@ function FeedbackForm() {
               <div className="flex items-center justify-center py-16">
                 <div className="flex items-center gap-3 text-white/46">
                   <LoaderCircle className="animate-spin" size={18} />
-                  <span className="text-phase" style={{ letterSpacing: '0.22em' }}>Feedback wird geladen</span>
+                  <span className="text-phase" style={{ letterSpacing: '0.22em' }}>{messages.feedback.loading}</span>
                 </div>
               </div>
             )}
 
             {loaded && reviewExercises.length > 0 && (
-              <div className="glass-card rounded-[1.35rem] px-4 py-3 text-sm leading-6 text-white/54">
-                Bewerte nur die Übungen, die du heute abgeschlossen hast. Kurze Hinweise zu Intensität oder
-                Beschwerden helfen Dr. Mia, die nächste Einheit sicherer anzupassen.
+              <div className="glass-card rounded-[1.15rem] px-4 py-2.5 text-[0.92rem] leading-6 text-white/54">
+                {messages.feedback.hint}
               </div>
             )}
 
             {loaded && reviewExercises.map((exercise, index) => {
               const selected = feedbacks[index]?.difficulty
-              const selectedOption = FEEDBACK_OPTIONS.find(option => option.value === selected) ?? FEEDBACK_OPTIONS[0]
+              const selectedOption = feedbackOptions.find(option => option.value === selected) ?? feedbackOptions[0]
               const SelectedIcon = selectedOption.icon
               return (
                 <article
-                  key={`${exercise.name}-${index}`}
-                  className="glass-card animate-slide-up rounded-[1.15rem] px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)]"
+                  key={exercise.id}
+                  className="glass-card animate-slide-up rounded-[1.15rem] px-3 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)]"
                   style={{ animationDelay: `${index * 60}ms`, animationFillMode: 'both' }}
                 >
                   <div className="flex items-center gap-3">
@@ -275,11 +277,11 @@ function FeedbackForm() {
                       <div className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-white/18">
                         {String(index + 1).padStart(2, '0')}
                       </div>
-                      <h2 className="min-w-0 truncate font-display text-[1.15rem] uppercase leading-none tracking-[0.01em] text-white">
+                      <h2 className="min-w-0 truncate font-display text-[1.05rem] uppercase leading-none tracking-[0.01em] text-white sm:text-[1.15rem]">
                         {exercise.name}
                       </h2>
                       <div className="hidden shrink-0 text-[9px] uppercase tracking-[0.18em] text-white/22 sm:block">
-                        {PHASE_LABELS[exercise.phase]}
+                        {phaseLabels[exercise.phase]}
                       </div>
                     </div>
 
@@ -293,7 +295,7 @@ function FeedbackForm() {
                       </div>
 
                       <div className="grid grid-cols-4 gap-1 rounded-full border border-white/8 bg-[rgba(255,255,255,0.03)] p-1">
-                        {FEEDBACK_OPTIONS.map(option => {
+                        {feedbackOptions.map(option => {
                           const Icon = option.icon
                           const isSelected = selected === option.value
                           return (
@@ -325,11 +327,11 @@ function FeedbackForm() {
           <aside className="mt-6 hidden lg:block">
             <div className="glass-card sticky top-6 rounded-[1.75rem] p-5">
               <div className="text-phase mb-3" style={{ color: 'var(--primary)' }}>
-                Nächster Schritt
+                {locale === 'en' ? 'Next step' : 'Nächster Schritt'}
               </div>
-              <h2 className="font-display text-3xl uppercase leading-none text-white">Plan updaten</h2>
+              <h2 className="font-display text-3xl uppercase leading-none text-white">{messages.feedback.asideTitle}</h2>
               <p className="mt-3 text-sm leading-7 text-white/48">
-                Deine Rückmeldung hilft, Belastung und Beschwerden in der nächsten Einheit besser zu steuern.
+                {messages.feedback.asideCopy}
               </p>
 
               <div className="mt-6 space-y-3">
@@ -345,7 +347,7 @@ function FeedbackForm() {
                   disabled={isBusy || !loaded}
                   className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-4 text-sm font-semibold uppercase tracking-[0.16em] text-white/72 transition hover:bg-white/7 disabled:opacity-50"
                 >
-                  Feedback überspringen
+                  {messages.feedback.asideSkip}
                 </button>
               </div>
             </div>
@@ -368,7 +370,7 @@ function FeedbackForm() {
             className="inline-flex min-h-[3.75rem] items-center justify-center gap-2 rounded-[1rem] border border-white/10 bg-white/4 px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72 transition hover:bg-white/7 disabled:opacity-50"
           >
             <SkipForward size={16} />
-            Überspringen
+            {messages.feedback.skip}
           </button>
         </div>
       </div>

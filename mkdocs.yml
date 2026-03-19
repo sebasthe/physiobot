@@ -5,6 +5,7 @@ site_dir: site
 
 theme:
   name: material
+  language: en
   features:
     - navigation.sections
     - navigation.expand
@@ -18,6 +19,41 @@ theme:
       accent: amber
 
 plugins:
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: de
+          name: Deutsch
+          build: true
+          nav_translations:
+            Home: Start
+            Architecture: Architektur
+            Decisions: Entscheidungen
+            System Overview: Systemüberblick
+            Training Plan Lifecycle: Trainingsplan-Lebenszyklus
+            AI-Generated Text and Cost Drivers: KI-generierte Texte und Kostentreiber
+            Privacy and Data Handling: Datenschutz und Datenfluss
+            Physio Mode and Safety: Physio-Modus und Sicherheit
+            Memory Architecture: Speicherarchitektur
+            Data Model and Storage: Datenmodell und Speicherung
+            Scheduling and Reminders: Terminierung und Erinnerungen
+            Gamification: Gamification
+            Voice Mode - Current Architecture: Voice-Modus - Aktuelle Architektur
+            Voice Orchestration: Voice-Orchestrierung
+            Voice Tool Execution: Voice-Tool-Ausführung
+            Voice Provider Matrix: Voice-Provider-Matrix
+            Voice Telemetry and Observability: Voice-Telemetrie und Beobachtbarkeit
+            ADR-0001 Documentation Scope and Portal: ADR-0001 Dokumentationsumfang und Portal
+            ADR-0002 Privacy Consent and Data Classification: ADR-0002 Datenschutz-Einwilligung und Datenklassifikation
+            ADR-0003 Physio Safety Boundaries: ADR-0003 Physio-Sicherheitsgrenzen
+            ADR-0004 Derived Coaching Memory: ADR-0004 Abgeleiteter Coaching-Speicher
+            ADR-0005 Mode-Based Voice Orchestration: ADR-0005 Modusbasierte Voice-Orchestrierung
+            ADR-0006 Kokoro Local TTS: ADR-0006 Kokoro Local TTS
   - search
 
 markdown_extensions:
@@ -37,6 +73,15 @@ markdown_extensions:
 extra_javascript:
   - https://unpkg.com/mermaid@11/dist/mermaid.min.js
   - javascripts/mermaid-init.js
+
+extra:
+  alternate:
+    - name: English
+      link: /
+      lang: en
+    - name: Deutsch
+      link: /de/
+      lang: de
 
 exclude_docs: |
   plans/**

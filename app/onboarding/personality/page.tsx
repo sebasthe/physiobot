@@ -1,6 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useI18n } from '@/components/i18n/I18nProvider'
+import LanguageToggle from '@/components/i18n/LanguageToggle'
+import { persistLanguageCookie } from '@/lib/i18n/client'
 import { createClient } from '@/lib/supabase/client'
 import type { MotivationStyle, FeedbackStyle, Language } from '@/lib/types'
 import { DEFAULT_USER_PERSONALITY } from '@/lib/user-personality'
@@ -12,56 +15,56 @@ interface Question {
   options: { value: string; label: string; description: string; emoji: string }[]
 }
 
-const QUESTIONS: Question[] = [
-  {
-    id: 'motivation_style',
-    question: 'Was treibt dich an?',
-    subtext: 'Dein Coach passt sich deiner Motivation an.',
-    options: [
-      { value: 'goal_oriented', label: 'Ziele erreichen', description: 'Ich will konkrete Meilensteine setzen und übertreffen', emoji: '🎯' },
-      { value: 'pain_avoidance', label: 'Schmerzen loswerden', description: 'Ich will Einschränkungen überwinden und schmerzfrei leben', emoji: '💪' },
-      { value: 'mixed', label: 'Beides', description: 'Schmerzen reduzieren und gleichzeitig stärker werden', emoji: '⚡' },
-    ],
-  },
-  {
-    id: 'feedback_style',
-    question: 'Wie soll dich dein Coach ansprechen?',
-    subtext: 'Du kannst das später jederzeit ändern.',
-    options: [
-      { value: 'energetic', label: 'Energiegeladen', description: 'Motivierend, enthusiastisch, mit Power', emoji: '🔥' },
-      { value: 'direct', label: 'Direkt & fordernd', description: 'Klar, kein Drum-herum, hohe Erwartungen', emoji: '⚡' },
-      { value: 'gentle', label: 'Sanft & ermutigend', description: 'Geduldig, verständnisvoll, ruhiger Rhythmus', emoji: '🌿' },
-    ],
-  },
-  {
-    id: 'coach_persona',
-    question: 'Welcher Coach-Typ passt zu dir?',
-    options: [
-      { value: 'tony_robbins', label: 'Der Energizer', description: 'Grenzen sprengen, maximales Potenzial — Tony Robbins Energie', emoji: '🚀' },
-      { value: 'calm_coach', label: 'Der Ruhige', description: 'Fokus, Atemkontrolle, methodisch — wie ein Yoga-Sportcoach', emoji: '🧘' },
-      { value: 'drill_sergeant', label: 'Der Forderer', description: 'Keine Ausreden, maximale Disziplin — militärische Präzision', emoji: '🎖️' },
-    ],
-  },
-  {
-    id: 'language',
-    question: 'In welcher Sprache soll dein Coach sprechen?',
-    options: [
-      { value: 'de', label: 'Deutsch', description: 'Coaching auf Deutsch', emoji: '🇩🇪' },
-      { value: 'en', label: 'English', description: 'Coaching in English', emoji: '🇬🇧' },
-    ],
-  },
-]
-
 export default function PersonalityOnboardingPage() {
   const [step, setStep] = useState(0)
   const [selections, setSelections] = useState<Record<string, string>>({
     ...DEFAULT_USER_PERSONALITY,
   })
   const [isLoading, setIsLoading] = useState(false)
+  const { messages, setLocale } = useI18n()
   const router = useRouter()
+  const questions: Question[] = [
+    {
+      id: 'motivation_style',
+      question: messages.onboarding.personality.questions.motivation.question,
+      subtext: messages.onboarding.personality.questions.motivation.subtext,
+      options: [
+        { value: 'goal_oriented', label: messages.onboarding.personality.questions.motivation.goalOriented.label, description: messages.onboarding.personality.questions.motivation.goalOriented.description, emoji: '🎯' },
+        { value: 'pain_avoidance', label: messages.onboarding.personality.questions.motivation.painAvoidance.label, description: messages.onboarding.personality.questions.motivation.painAvoidance.description, emoji: '💪' },
+        { value: 'mixed', label: messages.onboarding.personality.questions.motivation.mixed.label, description: messages.onboarding.personality.questions.motivation.mixed.description, emoji: '⚡' },
+      ],
+    },
+    {
+      id: 'feedback_style',
+      question: messages.onboarding.personality.questions.feedback.question,
+      subtext: messages.onboarding.personality.questions.feedback.subtext,
+      options: [
+        { value: 'energetic', label: messages.onboarding.personality.questions.feedback.energetic.label, description: messages.onboarding.personality.questions.feedback.energetic.description, emoji: '🔥' },
+        { value: 'direct', label: messages.onboarding.personality.questions.feedback.direct.label, description: messages.onboarding.personality.questions.feedback.direct.description, emoji: '⚡' },
+        { value: 'gentle', label: messages.onboarding.personality.questions.feedback.gentle.label, description: messages.onboarding.personality.questions.feedback.gentle.description, emoji: '🌿' },
+      ],
+    },
+    {
+      id: 'coach_persona',
+      question: messages.onboarding.personality.questions.persona.question,
+      options: [
+        { value: 'tony_robbins', label: messages.onboarding.personality.questions.persona.energizer.label, description: messages.onboarding.personality.questions.persona.energizer.description, emoji: '🚀' },
+        { value: 'calm_coach', label: messages.onboarding.personality.questions.persona.calm.label, description: messages.onboarding.personality.questions.persona.calm.description, emoji: '🧘' },
+        { value: 'drill_sergeant', label: messages.onboarding.personality.questions.persona.drill.label, description: messages.onboarding.personality.questions.persona.drill.description, emoji: '🎖️' },
+      ],
+    },
+    {
+      id: 'language',
+      question: messages.onboarding.personality.questions.language.question,
+      options: [
+        { value: 'de', label: messages.onboarding.personality.questions.language.de.label, description: messages.onboarding.personality.questions.language.de.description, emoji: '🇩🇪' },
+        { value: 'en', label: messages.onboarding.personality.questions.language.en.label, description: messages.onboarding.personality.questions.language.en.description, emoji: '🇬🇧' },
+      ],
+    },
+  ]
 
-  const current = QUESTIONS[step]
-  const progress = ((step + 1) / QUESTIONS.length) * 100
+  const current = questions[step]
+  const progress = ((step + 1) / questions.length) * 100
   const selectedValue = selections[current.id]
 
   const handleSelect = (value: string) => {
@@ -69,7 +72,7 @@ export default function PersonalityOnboardingPage() {
   }
 
   const handleNext = async () => {
-    if (step < QUESTIONS.length - 1) {
+    if (step < questions.length - 1) {
       setStep(s => s + 1)
       return
     }
@@ -89,16 +92,23 @@ export default function PersonalityOnboardingPage() {
     if (error) {
       console.error('Failed to save personality:', error)
     }
+    const nextLanguage = selections.language === 'en' ? 'en' : 'de'
+    persistLanguageCookie(nextLanguage)
+    setLocale(nextLanguage)
     router.push('/onboarding/health-profile')
   }
 
   return (
     <main className="vital-gradient mx-auto flex min-h-screen max-w-xl flex-col px-5 pt-safe md:max-w-4xl md:px-6 lg:max-w-5xl lg:px-8" style={{ paddingTop: 'max(24px, var(--safe-top))' }}>
+      <div className="mb-6 flex justify-end">
+        <LanguageToggle />
+      </div>
+
       {/* Progress bar */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <span className="text-phase" style={{ color: 'var(--text-muted)', letterSpacing: '0.15em', fontSize: '0.65rem' }}>
-            SCHRITT {step + 1} VON {QUESTIONS.length}
+            {messages.onboarding.personality.step.toUpperCase()} {step + 1} {messages.onboarding.personality.of.toUpperCase()} {questions.length}
           </span>
           {step > 0 && (
             <button
@@ -106,7 +116,7 @@ export default function PersonalityOnboardingPage() {
               className="text-xs transition-colors"
               style={{ color: 'var(--text-muted)' }}
             >
-              ← Zurück
+              {messages.onboarding.personality.back}
             </button>
           )}
         </div>
@@ -163,7 +173,7 @@ export default function PersonalityOnboardingPage() {
           disabled={isLoading || !selectedValue}
           className="btn-primary w-full rounded-xl py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Speichern...' : step < QUESTIONS.length - 1 ? 'Weiter →' : 'Abschließen'}
+          {isLoading ? messages.onboarding.personality.saving : step < questions.length - 1 ? messages.onboarding.personality.next : messages.onboarding.personality.finish}
         </button>
       </div>
     </main>

@@ -42,7 +42,7 @@
 
 :root {
   --radius: 1rem;
-  --nav-height: 5.25rem;
+  --nav-height: 4.25rem;
   --background: #0d0b09;
   --foreground: #ffffff;
   --card: rgba(26, 23, 20, 0.92);
@@ -128,6 +128,30 @@
   input,
   textarea {
     color: var(--foreground);
+  }
+
+  input.time-input {
+    min-width: 0;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input.time-input::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
+  input.time-input::-webkit-datetime-edit,
+  input.time-input::-webkit-datetime-edit-fields-wrapper,
+  input.time-input::-webkit-datetime-edit-hour-field,
+  input.time-input::-webkit-datetime-edit-minute-field,
+  input.time-input::-webkit-datetime-edit-ampm-field,
+  input.time-input::-webkit-datetime-edit-text {
+    padding: 0;
+    color: var(--foreground);
+  }
+
+  input.time-input::-webkit-calendar-picker-indicator {
+    opacity: 0.72;
   }
 
   input[type='range'] {
@@ -444,39 +468,39 @@
     inset-inline: 0;
     bottom: 0;
     z-index: 40;
-    padding: 1.5rem 1rem calc(1rem + var(--safe-bottom));
-    background: linear-gradient(180deg, rgba(13, 11, 9, 0), rgba(13, 11, 9, 0.9));
+    padding: 0.72rem 0.72rem calc(0.5rem + var(--safe-bottom));
+    background: linear-gradient(180deg, rgba(13, 11, 9, 0), rgba(13, 11, 9, 0.82));
   }
 
   .bottom-nav {
     pointer-events: auto;
     position: relative;
     display: flex;
-    width: min(100%, 28rem);
+    width: min(100%, 23.5rem);
     margin: 0 auto;
     align-items: center;
     justify-content: space-around;
     gap: 0.25rem;
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 1.35rem;
-    background: rgba(17, 19, 18, 0.84);
-    padding: 0.5rem 0.45rem;
-    box-shadow: var(--shadow-lg);
-    backdrop-filter: blur(18px);
+    border-radius: 1rem;
+    background: rgba(14, 15, 15, 0.74);
+    padding: 0.25rem;
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(22px);
   }
 
   .nav-item {
     position: relative;
     display: inline-flex;
-    min-height: 3.75rem;
+    min-height: 3.1rem;
     flex: 1;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.24rem;
-    border-radius: 0.9rem;
-    color: rgba(255, 255, 255, 0.22);
-    transition: color 0.18s ease, transform 0.18s ease;
+    gap: 0.15rem;
+    border-radius: 0.85rem;
+    color: rgba(255, 255, 255, 0.28);
+    transition: color 0.18s ease, transform 0.18s ease, background-color 0.18s ease;
   }
 
   .nav-item:hover {
@@ -484,13 +508,14 @@
   }
 
   .nav-item--active {
+    background: rgba(255, 255, 255, 0.04);
     color: var(--accent);
   }
 
   .nav-label {
-    font-size: 0.5rem;
+    font-size: 0.42rem;
     font-weight: 600;
-    letter-spacing: 0.26em;
+    letter-spacing: 0.24em;
     text-transform: uppercase;
   }
 
@@ -608,11 +633,11 @@
   }
 
   .bottom-nav-shell {
-    padding: 0.75rem 0.75rem calc(0.65rem + var(--safe-bottom));
+    padding: 0.65rem 0.75rem calc(0.5rem + var(--safe-bottom));
   }
 
   .bottom-nav {
-    width: min(100%, 34rem);
+    width: min(100%, 32rem);
     padding: 0.35rem;
     border-radius: 1.25rem;
   }
@@ -917,7 +942,7 @@
 }
 
 .session-player__shell {
-  grid-template-rows: auto minmax(6.75rem, 8.75rem) minmax(0, 1fr);
+  grid-template-rows: auto minmax(4.5rem, auto) minmax(0, 1fr);
 }
 
 .session-player__hero {
@@ -927,13 +952,13 @@
 
 .session-player__hero-inner {
   display: grid;
-  min-height: min(8.75rem, 18vh);
+  min-height: min(4.75rem, 10vh);
   align-content: start;
 }
 
 .session-player__title {
-  min-height: 1.8em;
-  max-height: 1.8em;
+  min-height: 0;
+  max-height: 2.9em;
   overflow: hidden;
 }
 
@@ -942,10 +967,13 @@
   min-height: 0;
   width: 100%;
   justify-items: center;
-  align-content: start;
-  grid-template-rows: minmax(13.5rem, 34vh) minmax(7rem, 10.5rem) auto;
-  row-gap: clamp(1.1rem, 2.7vh, 2rem);
-  padding-top: clamp(1rem, 2vh, 1.6rem);
+  align-content: space-between;
+  grid-template-rows: minmax(9.5rem, 25vh) minmax(4.8rem, auto) auto;
+  row-gap: clamp(0.6rem, 1.8vh, 1.05rem);
+  padding-top: clamp(0.3rem, 1.1vh, 0.75rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
 }
 
 .session-player__timer {
@@ -955,18 +983,18 @@
 .session-player__copy-wrap {
   min-height: 0;
   width: 100%;
-  max-width: 21rem;
-  min-height: min(10.5rem, 21vh);
+  max-width: 20rem;
+  min-height: min(5.6rem, 11vh);
 }
 
 .session-player__copy {
   width: 100%;
-  min-height: 8.88em;
-  max-height: 8.88em;
+  min-height: 4.8em;
+  max-height: 4.8em;
 }
 
 .session-player__hint {
-  min-height: 1.25rem;
+  min-height: 0;
 }
 
 .session-player__controls {

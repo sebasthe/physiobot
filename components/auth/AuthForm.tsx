@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Lock, Mail } from 'lucide-react'
+import { useI18n } from '@/components/i18n/I18nProvider'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -14,6 +15,7 @@ interface AuthFormProps {
 export default function AuthForm({ mode, onSubmit, isLoading, error }: AuthFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const { messages } = useI18n()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,7 +25,7 @@ export default function AuthForm({ mode, onSubmit, isLoading, error }: AuthFormP
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{messages.auth.email}</Label>
         <div className="relative">
           <Mail className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-white/30" />
           <Input
@@ -32,14 +34,14 @@ export default function AuthForm({ mode, onSubmit, isLoading, error }: AuthFormP
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            placeholder="deine@email.de"
+            placeholder={messages.auth.emailPlaceholder}
             autoComplete="email"
             className="pl-11"
           />
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="password">Passwort</Label>
+        <Label htmlFor="password">{messages.auth.password}</Label>
         <div className="relative">
           <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-white/30" />
           <Input
@@ -64,7 +66,7 @@ export default function AuthForm({ mode, onSubmit, isLoading, error }: AuthFormP
         disabled={isLoading}
         className="btn-primary w-full rounded-2xl py-4 text-base disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isLoading ? '...' : mode === 'login' ? 'Anmelden' : 'Registrieren'}
+        {isLoading ? '...' : mode === 'login' ? messages.auth.loginAction : messages.auth.registerAction}
       </button>
     </form>
   )

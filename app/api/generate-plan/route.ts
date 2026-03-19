@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { anthropic } from '@/lib/claude/client'
 import { buildSystemPrompt, buildPlanRequestMessage } from '@/lib/claude/prompts'
 import { extractJson } from '@/lib/claude/extract-json'
+import { normalizeStoredExercises } from '@/lib/exercises'
 import { getRelevantMemories } from '@/lib/mem0'
 import type { HealthProfile, UserPersonality, TrainingPlan } from '@/lib/types'
 
@@ -48,6 +49,7 @@ export async function POST() {
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
     const planData = extractJson<Pick<TrainingPlan, 'exercises'>>(content.text)
+    const normalizedExercises = normalizeStoredExercises(planData.exercises, typedPersonality.language)
 
     const { data: plan, error } = await supabase
       .from('training_plans')
@@ -55,7 +57,7 @@ export async function POST() {
         assigned_to: user.id,
         created_by: user.id,
         source: 'ai',
-        exercises: planData.exercises,
+        exercises: normalizedExercises,
       })
       .select()
       .single()

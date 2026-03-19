@@ -1,9 +1,15 @@
 import { redirect } from 'next/navigation'
 import TransitionLink from '@/components/navigation/TransitionLink'
+import { toLocaleTag } from '@/lib/i18n/config'
+import { formatTemplate } from '@/lib/i18n/format'
+import { getMessages } from '@/lib/i18n/messages'
+import { getRequestLanguage } from '@/lib/i18n/server'
 import { ALL_BADGES } from '@/lib/types'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function BadgesPage() {
+  const locale = await getRequestLanguage()
+  const messages = getMessages(locale)
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
@@ -19,27 +25,30 @@ export default async function BadgesPage() {
 
   return (
     <main className="vital-gradient min-h-screen pb-10 lg:min-h-full">
-      <div className="px-5 pt-8 md:px-8 md:pb-8 lg:px-10 lg:pb-10 xl:px-12 xl:pt-14">
-        <div className="mb-10 md:flex md:items-end md:justify-between md:gap-8">
-          <div>
-            <TransitionLink href="/dashboard" className="mb-8 inline-flex items-center gap-2 p-0 text-sm font-semibold text-[var(--accent)] transition-colors hover:text-[color:rgba(42,157,138,0.8)]">
-              ← Zurück zum Dashboard
-            </TransitionLink>
-            <span className="mb-2 block text-xs font-medium uppercase tracking-[0.28em] text-[rgba(42,157,138,0.6)]">Fortschritt</span>
-            <h1 className="font-display text-6xl uppercase tracking-tight text-white">Badges</h1>
-            <p className="mt-2 text-sm text-white/40">
-              {earnedMap.size} von {ALL_BADGES.length} freigeschaltet.
-            </p>
+      <div className="px-5 pt-6 md:px-8 md:pb-8 lg:px-10 lg:pb-10 xl:px-12 xl:pt-14">
+        <section className="surface-card mb-5 rounded-[1.85rem] p-4 md:mb-10 md:rounded-[2rem] md:p-7">
+          <div className="md:flex md:items-end md:justify-between md:gap-8">
+            <div>
+              <TransitionLink href="/dashboard" className="mb-4 inline-flex items-center gap-2 p-0 text-sm font-semibold text-[var(--accent)] transition-colors hover:text-[color:rgba(42,157,138,0.8)]">
+                {messages.common.backToDashboard}
+              </TransitionLink>
+              <span className="mb-2 block text-xs font-medium uppercase tracking-[0.28em] text-[rgba(42,157,138,0.6)]">{messages.badges.eyebrow}</span>
+              <h1 className="font-display text-[clamp(2.45rem,11.5vw,4.9rem)] uppercase leading-[0.94] tracking-tight text-white">{messages.badges.title}</h1>
+              <p className="mt-2.5 text-sm leading-6 text-white/46 md:mt-3 md:leading-7">
+                {formatTemplate(messages.badges.summary, { earned: earnedMap.size, total: ALL_BADGES.length })}
+              </p>
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/5 bg-white/5 px-4 py-3 text-[10px] uppercase tracking-[0.16em] text-white/45 md:mt-0 md:min-w-[15rem] md:text-right md:text-xs">
+              {messages.badges.glance}
+            </div>
           </div>
-          <div className="mt-6 rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-xs uppercase tracking-[0.18em] text-white/45 md:mt-0 md:min-w-[15rem] md:text-right">
-            Fortschritt auf einen Blick
-          </div>
-        </div>
+        </section>
 
         <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
           {ALL_BADGES.map(badge => {
             const earnedAt = earnedMap.get(badge.key)
             const earned = Boolean(earnedAt)
+            const badgeCopy = messages.badgesCatalog[badge.key]
             return (
               <div
                 key={badge.key}
@@ -55,14 +64,14 @@ export default async function BadgesPage() {
                     {badge.emoji}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-bold text-[var(--text-primary)]">{badge.name}</div>
-                    <div className="text-xs text-[var(--text-secondary)]">{badge.description}</div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">{badgeCopy.name}</div>
+                    <div className="text-xs text-[var(--text-secondary)]">{badgeCopy.description}</div>
                   </div>
                 </div>
                 <div className="mt-3 text-xs font-medium text-[var(--text-muted)]">
                   {earnedAt
-                    ? `Freigeschaltet am ${new Date(earnedAt).toLocaleDateString('de-DE')}`
-                    : 'Noch nicht freigeschaltet'}
+                    ? formatTemplate(messages.badges.unlockedOn, { date: new Date(earnedAt).toLocaleDateString(toLocaleTag(locale)) })
+                    : messages.badges.locked}
                 </div>
               </div>
             )
